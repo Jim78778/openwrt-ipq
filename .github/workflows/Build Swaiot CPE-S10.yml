@@ -39,16 +39,11 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y \
-            build-essential \
-            autoconf automake autopoint bc bison bzip2 ccache clang cmake \
-            coreutils curl diffutils findutils file flex gawk gettext git gperf help2man \
-            intltool jq libelf-dev libncurses-dev libssl-dev lua5.3 \
+            build-essential autoconf automake autopoint bc bison bzip2 ccache \
+            coreutils curl diffutils findutils file flex gawk gettext git gperf \
+            help2man intltool jq libelf-dev libncurses-dev libssl-dev lua5.3 \
             patch perl python3 python3-distutils rsync subversion unzip wget \
             zlib1g-dev zstd
-
-          # Cleanup previous host builds
-          rm -rf $OPENWRT_DIR/staging_dir/host
-          rm -rf $OPENWRT_DIR/build_dir/hostpkg
 
           sudo timedatectl set-timezone "$TZ"
 
@@ -65,62 +60,37 @@ jobs:
           cd $OPENWRT_DIR
           ./scripts/getver.sh
 
-      # 7. Fix NSS dependencies & apply symbol patch
-      - name: Fix NSS dependencies and patch ECM
+      # 7. Fix feeds (remove duplicate nss_packages)
+      - name: Fix feeds
         run: |
           cd $OPENWRT_DIR
+          cp feeds.conf.default feeds.conf.default.bak || true
+          sed -i '/^src-git nss_packages/d' feeds.conf.default
+          echo 'src-git nss_packages https://github.com/openwrt/nss-packages.git;master' >> feeds.conf.default
 
-          # 补丁修复 nss_rmnet_rx_get_ifnum 符号问题
-          cat > /tmp/fix_rmnet_symbol.patch << 'EOF'
-          --- a/ecm_interface.c
-          +++ b/ecm_interface.c
-          @@ -1234,7 +1234,11 @@ static int ecm_interface_rmnet_event(struct notifier_block *nb,
-          #ifdef ECM_INTERFACE_RMNET_ENABLE
-          static int ecm_interface_rmnet_rx_event(struct sk_buff *skb, struct net_device *dev)
-          {
-          +#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
-          +    int ifnum = nss_rmnet_rx_get_interface_number(skb);
-          +#else
-          int ifnum = nss_rmnet_rx_get_ifnum(skb);
-          +#endif
-          
-          if (ifnum < 0) {
-          return NOTIFY_DONE;
-          EOF
-
-          if [ -f "feeds/nss_packages/qca-nss-ecm/src/ecm_interface.c" ]; then
-            patch -p1 -d feeds/nss_packages/qca-nss-ecm/src/ < /tmp/fix_rmnet_symbol.patch || true
-          fi
-
-      # 8. Verify target base
-      - name: Verify qualcommax target
-        run: |
-          cd $OPENWRT_DIR
-          ls target/linux/qualcommax >/dev/null
-
-      # 9. Add QModem feed
+      # 8. Add QModem feed
       - name: Add QModem feed
         run: |
           cd $OPENWRT_DIR
           grep -q '^src-git qmodem' feeds.conf.default || \
             echo 'src-git qmodem https://github.com/FUjr/QModem.git;main' >> feeds.conf.default
 
-      # 10. Update & install feeds
+      # 9. Update & install feeds
       - name: Update feeds
         run: |
           cd $OPENWRT_DIR
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      # 11. Apply ci.config
+      # 10. Apply ci.config
       - name: Apply ci.config
         run: |
           cd $OPENWRT_DIR
-          test -f "$GITHUB_WORKSPACE/ci.config" || exit 1
+          test -f "$GITHUB_WORKSPACE/ci.config"
           cat "$GITHUB_WORKSPACE/ci.config" >> .config
 
-      # 12. Force Swaiot CPE-S10 + NSS options
-      - name: Force target & NSS options
+      # 11. Force target + MBIM only (T99W373)
+      - name: Force Swaiot CPE-S10 + MBIM
         run: |
           cd $OPENWRT_DIR
           sed -i '/^CONFIG_TARGET_/d' .config
@@ -128,51 +98,61 @@ jobs:
           CONFIG_TARGET_qualcommax=y
           CONFIG_TARGET_qualcommax_ipq807x=y
           CONFIG_TARGET_qualcommax_ipq807x_DEVICE_swaiot_cpe_s10=y
-          CONFIG_NSS_ECM=y
-          CONFIG_QCA_NSS_DP=y
+          
+          # MBIM ONLY (Foxconn T99W373)
+          CONFIG_PACKAGE_kmod-mhi-wwan=y
+          CONFIG_PACKAGE_kmod-mhi-wwan-mbim=y
+          CONFIG_PACKAGE_kmod-mhi-wwan-ctrl=y
+          
+          # Disable ECM / rmnet (non-fatal)
+          # CONFIG_PACKAGE_kmod-qca-nss-ecm is not set
+          # CONFIG_PACKAGE_kmod-qca-nss-rmnet is not set
+          
           CONFIG_QCA_NSS_DRV=y
+          CONFIG_QCA_NSS_DP=y
           CONFIG_DEVEL=y
           CONFIG_CCACHE=y
           EOF
 
-      # 13. Make defconfig
+      # 12. Make defconfig
       - name: Make defconfig
         run: |
           cd $OPENWRT_DIR
           make defconfig
-          grep swaiot_cpe_s10 .config || exit 1
+          grep swaiot_cpe_s10 .config
 
-      # 14. Download sources
+      # 13. Download sources
       - name: Download packages
         run: |
           cd $OPENWRT_DIR
           make download -j$(nproc)
           find dl -size -1024c -delete
 
-      # 15. Build NSS drv/dp first
+      # 14. Build NSS drv + dp first
       - name: Build NSS drv/dp
         run: |
           cd $OPENWRT_DIR
-          make package/feeds/nss_packages/qca-nss-drv/compile V=s
-          make package/feeds/nss_packages/qca-nss-dp/compile V=s
+          make package/feeds/nss_packages/qca-nss-drv/compile -j$(nproc) || exit 1
+          make package/feeds/nss_packages/qca-nss-dp/compile -j$(nproc) || exit 1
 
-      # 16. Build NSS ECM (可失败，不影响固件)
-      - name: Build NSS ECM (skip if fails)
+      # 15. Build ECM (non-fatal)
+      - name: Build ECM (skip if fails)
         run: |
           cd $OPENWRT_DIR
-          make package/feeds/nss_packages/qca-nss-ecm/compile V=s || echo "ECM build failed, skipping..."
+          make package/feeds/nss_packages/qca-nss-ecm/compile -j$(nproc) || \
+            echo "WARNING: ECM build failed, skipped"
 
-      # 17. Build full firmware
+      # 16. Build full firmware
       - name: Build full firmware
         run: |
           cd $OPENWRT_DIR
-          make -j$(nproc) || make -j1 || make -j1 V=s
+          make -j$(nproc) || make -j1 V=s
 
-      # 18. Upload firmware artifacts
+      # 17. Upload firmware artifacts
       - name: Upload firmware
         uses: actions/upload-artifact@v4
         with:
-          name: Swaiot-CPE-S10-NSS
+          name: Swaiot-CPE-S10-MBIM
           path: $OPENWRT_DIR/bin/targets/qualcommax/ipq807x/*
           if-no-files-found: error
 
