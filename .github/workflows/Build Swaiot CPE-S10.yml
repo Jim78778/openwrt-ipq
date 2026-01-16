@@ -41,9 +41,11 @@ jobs:
         sudo apt install -y \
           ack antlr3 asciidoc autoconf automake autopoint binutils \
           bison build-essential bzip2 ccache clang cmake cpio curl \
-          device-tree-compiler diffutils flex gawk gettext git gperf help2man \
+          device-tree-compiler diffutils flex find gawk gettext git gperf help2man \
           intltool libelf-dev libncurses-dev libssl-dev perl python3 python3-distutils \
-          rsync unzip wget zlib1g-dev zstd bc
+          rsync subversion unzip wget which zlib1g-dev zstd bc
+        sudo timedatectl set-timezone "$TZ"
+
     # 5. Prepare /mnt
     - name: Prepare workspace
       run: |
@@ -84,7 +86,7 @@ jobs:
         test -f "$GITHUB_WORKSPACE/ci.config" || exit 1
         cat "$GITHUB_WORKSPACE/ci.config" >> .config
 
-    # 11. Force Swaiot CPE-S10 + NSS
+    # 11. Force Swaiot CPE-S10 + NSS options
     - name: Force target & NSS options
       run: |
         cd $OPENWRT_DIR
@@ -100,27 +102,48 @@ jobs:
         CONFIG_CCACHE=y
         EOF
 
-    # 12. defconfig
+    # 12. Make defconfig
     - name: Make defconfig
       run: |
         cd $OPENWRT_DIR
         make defconfig
         grep swaiot_cpe_s10 .config || exit 1
 
-    # 13. Download sources
+    # 13. Patch/symbol check for NSS
+    - name: Check NSS drv symbols
+      run: |
+        cd $OPENWRT_DIR
+        if ! grep -rq 'nss_rmnet_rx_get_ifnum' feeds/nss_packages/qca-nss-drv; then
+          echo "WARNING: qca-nss-drv 缺失 nss_rmnet_rx_get_ifnum 符号，ECM 编译可能失败"
+        fi
+
+    # 14. Download sources
     - name: Download packages
       run: |
         cd $OPENWRT_DIR
         make download -j$(nproc)
         find dl -size -1024c -delete
 
-    # 14. Build firmware
-    - name: Build firmware
+    # 15. Build NSS drv/dp first
+    - name: Build NSS drv/dp
       run: |
         cd $OPENWRT_DIR
-        make -j$(nproc) || make -j1 V=s
+        make package/feeds/nss_packages/qca-nss-drv/compile V=s
+        make package/feeds/nss_packages/qca-nss-dp/compile V=s
 
-    # 15. Upload firmware artifacts
+    # 16. Build NSS ECM
+    - name: Build NSS ECM
+      run: |
+        cd $OPENWRT_DIR
+        make package/feeds/nss_packages/qca-nss-ecm/compile V=s
+
+    # 17. Build full firmware
+    - name: Build full firmware
+      run: |
+        cd $OPENWRT_DIR
+        make -j$(nproc) || make -j1 || make -j1 V=s
+
+    # 18. Upload firmware artifacts
     - name: Upload firmware
       uses: actions/upload-artifact@v4
       with:
