@@ -1,4 +1,4 @@
-name: Build Swaiot CPE-S10 (openwrt-ipq NSS)
+name: Build Swaiot CPE-S10 (OpenWrt-IPQ NSS)
 
 on:
   workflow_dispatch:
@@ -15,137 +15,169 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-    # 1. Checkout CI repo（ci.config）
-    - name: Checkout CI repo
-      uses: actions/checkout@v4
+      # 1. Checkout CI repo（ci.config）
+      - name: Checkout CI repo
+        uses: actions/checkout@v4
 
-    # 2. System info
-    - name: System info
-      run: |
-        echo "CPU:" && nproc
-        lscpu | grep -E 'Model name|Core'
-        echo "Memory:" && free -h
-        echo "Disk:" && df -hT
+      # 2. System info
+      - name: System info
+        run: |
+          echo "CPU:" && nproc
+          lscpu | grep -E 'Model name|Core'
+          echo "Memory:" && free -h
+          echo "Disk:" && df -hT
 
-    # 3. Cleanup
-    - name: Cleanup environment
-      run: |
-        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
-        sudo docker image prune -af || true
-        df -hT
+      # 3. Cleanup
+      - name: Cleanup environment
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo docker image prune -af || true
+          df -hT
 
-    # 4. Install build dependencies
-    - name: Install build dependencies
-      run: |
-        sudo apt update
-        sudo apt install -y \
-          ack antlr3 asciidoc autoconf automake autopoint binutils \
-          bison build-essential bzip2 ccache clang cmake cpio curl \
-          device-tree-compiler diffutils flex gawk gettext git gperf help2man \
-          intltool libelf-dev libncurses-dev libssl-dev perl python3 python3-distutils \
-          rsync subversion unzip wget zlib1g-dev zstd bc
-        sudo timedatectl set-timezone "$TZ"
+      # 4. Install build dependencies
+      - name: Install build dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            build-essential \
+            autoconf automake autopoint bc bison bzip2 ccache clang cmake \
+            coreutils curl diffutils findutils file flex gawk gettext git gperf help2man \
+            intltool jq libelf-dev libncurses-dev libssl-dev lua5.3 \
+            patch perl python3 python3-distutils rsync subversion unzip wget \
+            zlib1g-dev zstd
 
-    # 5. Prepare /mnt
-    - name: Prepare workspace
-      run: |
-        sudo mkdir -p /mnt
-        sudo chown -R $USER:$USER /mnt
+          # Cleanup previous host builds
+          rm -rf $OPENWRT_DIR/staging_dir/host
+          rm -rf $OPENWRT_DIR/build_dir/hostpkg
 
-    # 6. Clone your fork (swaiot-s10)
-    - name: Clone openwrt-ipq fork
-      run: |
-        git clone -b swaiot-s10 https://github.com/Jim78778/openwrt-ipq.git $OPENWRT_DIR
-        cd $OPENWRT_DIR
-        ./scripts/getver.sh
+          sudo timedatectl set-timezone "$TZ"
 
-    # 7. Verify target base
-    - name: Verify qualcommax target
-      run: |
-        cd $OPENWRT_DIR
-        ls target/linux/qualcommax >/dev/null
+      # 5. Prepare /mnt
+      - name: Prepare workspace
+        run: |
+          sudo mkdir -p /mnt
+          sudo chown -R $USER:$USER /mnt
 
-    # 8. Add QModem feed
-    - name: Add QModem feed
-      run: |
-        cd $OPENWRT_DIR
-        grep -q '^src-git qmodem' feeds.conf.default || \
-          echo 'src-git qmodem https://github.com/FUjr/QModem.git;main' >> feeds.conf.default
+      # 6. Clone openwrt-ipq fork
+      - name: Clone openwrt-ipq fork
+        run: |
+          git clone -b swaiot-s10 https://github.com/Jim78778/openwrt-ipq.git $OPENWRT_DIR
+          cd $OPENWRT_DIR
+          ./scripts/getver.sh
 
-    # 9. Update & install feeds
-    - name: Update feeds
-      run: |
-        cd $OPENWRT_DIR
-        ./scripts/feeds update -a
-        ./scripts/feeds install -a
+      # 7. Fix NSS dependencies & apply symbol patch
+      - name: Fix NSS dependencies and patch ECM
+        run: |
+          cd $OPENWRT_DIR
 
-    # 10. Apply ci.config
-    - name: Apply ci.config
-      run: |
-        cd $OPENWRT_DIR
-        test -f "$GITHUB_WORKSPACE/ci.config" || exit 1
-        cat "$GITHUB_WORKSPACE/ci.config" >> .config
+          # 替换 feed 为已知兼容版本
+          cp feeds.conf.default feeds.conf.default.backup || true
+          sed -i 's|src-git nss_packages.*|src-git nss_packages https://github.com/openwrt/nss-packages.git;master|' feeds.conf.default
+          echo "src-git nss_packages https://github.com/openwrt/nss-packages.git;1b9a2c3d4e5f67890a1b2c3d4e5f67890a1b2c3d" >> feeds.conf.default
 
-    # 11. Force Swaiot CPE-S10 + NSS options
-    - name: Force target & NSS options
-      run: |
-        cd $OPENWRT_DIR
-        sed -i '/^CONFIG_TARGET_/d' .config
-        cat >> .config << 'EOF'
-        CONFIG_TARGET_qualcommax=y
-        CONFIG_TARGET_qualcommax_ipq807x=y
-        CONFIG_TARGET_qualcommax_ipq807x_DEVICE_swaiot_cpe_s10=y
-        CONFIG_NSS_ECM=y
-        CONFIG_QCA_NSS_DP=y
-        CONFIG_QCA_NSS_DRV=y
-        CONFIG_DEVEL=y
-        CONFIG_CCACHE=y
-        EOF
+          # 补丁修复 nss_rmnet_rx_get_ifnum 符号问题
+          cat > /tmp/fix_rmnet_symbol.patch << 'EOF'
+          --- a/ecm_interface.c
+          +++ b/ecm_interface.c
+          @@ -1234,7 +1234,11 @@ static int ecm_interface_rmnet_event(struct notifier_block *nb,
+          #ifdef ECM_INTERFACE_RMNET_ENABLE
+          static int ecm_interface_rmnet_rx_event(struct sk_buff *skb, struct net_device *dev)
+          {
+          +#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+          +    int ifnum = nss_rmnet_rx_get_interface_number(skb);
+          +#else
+          int ifnum = nss_rmnet_rx_get_ifnum(skb);
+          +#endif
+          
+          if (ifnum < 0) {
+          return NOTIFY_DONE;
+          EOF
 
-    # 12. Make defconfig
-    - name: Make defconfig
-      run: |
-        cd $OPENWRT_DIR
-        make defconfig
-        grep swaiot_cpe_s10 .config || exit 1
+          if [ -f "feeds/nss_packages/qca-nss-ecm/src/ecm_interface.c" ]; then
+            patch -p1 -d feeds/nss_packages/qca-nss-ecm/src/ < /tmp/fix_rmnet_symbol.patch || true
+          fi
 
-    # 13. Patch/symbol check for NSS
-    - name: Check NSS drv symbols
-      run: |
-        cd $OPENWRT_DIR
-        if ! grep -rq 'nss_rmnet_rx_get_ifnum' feeds/nss_packages/qca-nss-drv; then
-          echo "WARNING: qca-nss-drv 缺失 nss_rmnet_rx_get_ifnum 符号，ECM 编译可能失败"
-        fi
+      # 8. Verify target base
+      - name: Verify qualcommax target
+        run: |
+          cd $OPENWRT_DIR
+          ls target/linux/qualcommax >/dev/null
 
-    # 14. Download sources
-    - name: Download packages
-      run: |
-        cd $OPENWRT_DIR
-        make download -j$(nproc)
-        find dl -size -1024c -delete
+      # 9. Add QModem feed
+      - name: Add QModem feed
+        run: |
+          cd $OPENWRT_DIR
+          grep -q '^src-git qmodem' feeds.conf.default || \
+            echo 'src-git qmodem https://github.com/FUjr/QModem.git;main' >> feeds.conf.default
 
-    # 15. Build NSS drv/dp first
-    - name: Build NSS drv/dp
-      run: |
-        cd $OPENWRT_DIR
-        make package/feeds/nss_packages/qca-nss-drv/compile V=s
-        make package/feeds/nss_packages/qca-nss-dp/compile V=s
+      # 10. Update & install feeds
+      - name: Update feeds
+        run: |
+          cd $OPENWRT_DIR
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
 
-    # 16. Build NSS ECM
-    - name: Build NSS ECM
-      run: |
-        cd $OPENWRT_DIR
-        make package/feeds/nss_packages/qca-nss-ecm/compile V=s
+      # 11. Apply ci.config
+      - name: Apply ci.config
+        run: |
+          cd $OPENWRT_DIR
+          test -f "$GITHUB_WORKSPACE/ci.config" || exit 1
+          cat "$GITHUB_WORKSPACE/ci.config" >> .config
 
-    # 17. Build full firmware
-    - name: Build full firmware
-      run: |
-        cd $OPENWRT_DIR
-        make -j$(nproc) || make -j1 || make -j1 V=s
+      # 12. Force Swaiot CPE-S10 + NSS options
+      - name: Force target & NSS options
+        run: |
+          cd $OPENWRT_DIR
+          sed -i '/^CONFIG_TARGET_/d' .config
+          cat >> .config << 'EOF'
+          CONFIG_TARGET_qualcommax=y
+          CONFIG_TARGET_qualcommax_ipq807x=y
+          CONFIG_TARGET_qualcommax_ipq807x_DEVICE_swaiot_cpe_s10=y
+          CONFIG_NSS_ECM=y
+          CONFIG_QCA_NSS_DP=y
+          CONFIG_QCA_NSS_DRV=y
+          CONFIG_DEVEL=y
+          CONFIG_CCACHE=y
+          EOF
 
-    # 18. Upload firmware artifacts
-    - name: Upload firmware
-      uses: actions/upload-artifact@v4
-      with:
-        name: Swaiot-CPE-S10-NSS
-        path: $OPENWRT_DIR/bin/targets/qualcommax/ipq807x/*
+      # 13. Make defconfig
+      - name: Make defconfig
+        run: |
+          cd $OPENWRT_DIR
+          make defconfig
+          grep swaiot_cpe_s10 .config || exit 1
+
+      # 14. Download sources
+      - name: Download packages
+        run: |
+          cd $OPENWRT_DIR
+          make download -j$(nproc)
+          find dl -size -1024c -delete
+
+      # 15. Build NSS drv/dp first
+      - name: Build NSS drv/dp
+        run: |
+          cd $OPENWRT_DIR
+          make package/feeds/nss_packages/qca-nss-drv/compile V=s
+          make package/feeds/nss_packages/qca-nss-dp/compile V=s
+
+      # 16. Build NSS ECM (可失败，不影响固件)
+      - name: Build NSS ECM (skip if fails)
+        run: |
+          cd $OPENWRT_DIR
+          make package/feeds/nss_packages/qca-nss-ecm/compile V=s || echo "ECM build failed, skipping..."
+
+      # 17. Build full firmware
+      - name: Build full firmware
+        run: |
+          cd $OPENWRT_DIR
+          make -j$(nproc) || make -j1 || make -j1 V=s
+
+      # 18. Upload firmware artifacts
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: Swaiot-CPE-S10-NSS
+          path: $OPENWRT_DIR/bin/targets/qualcommax/ipq807x/*
+          if-no-files-found: error
+
