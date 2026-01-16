@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - swaiot-s10  # 你的分支名
+      - swaiot-s10
 
 env:
   TZ: Asia/Shanghai
@@ -41,11 +41,9 @@ jobs:
         sudo apt install -y \
           ack antlr3 asciidoc autoconf automake autopoint binutils \
           bison build-essential bzip2 ccache clang cmake cpio curl \
-          device-tree-compiler flex gawk gettext git gperf help2man \
-          intltool libelf-dev libncurses-dev libssl-dev python3 \
-          python3-distutils rsync unzip wget zlib1g-dev zstd
-        sudo timedatectl set-timezone "$TZ"
-
+          device-tree-compiler diffutils flex gawk gettext git gperf help2man \
+          intltool libelf-dev libncurses-dev libssl-dev perl python3 python3-distutils \
+          rsync unzip wget zlib1g-dev zstd bc
     # 5. Prepare /mnt
     - name: Prepare workspace
       run: |
@@ -92,17 +90,15 @@ jobs:
         cd $OPENWRT_DIR
         sed -i '/^CONFIG_TARGET_/d' .config
         cat >> .config << 'EOF'
-CONFIG_TARGET_qualcommax=y
-CONFIG_TARGET_qualcommax_ipq807x=y
-CONFIG_TARGET_qualcommax_ipq807x_DEVICE_swaiot_cpe_s10=y
-
-CONFIG_NSS_ECM=y
-CONFIG_QCA_NSS_DP=y
-CONFIG_QCA_NSS_DRV=y
-
-CONFIG_DEVEL=y
-CONFIG_CCACHE=y
-EOF
+        CONFIG_TARGET_qualcommax=y
+        CONFIG_TARGET_qualcommax_ipq807x=y
+        CONFIG_TARGET_qualcommax_ipq807x_DEVICE_swaiot_cpe_s10=y
+        CONFIG_NSS_ECM=y
+        CONFIG_QCA_NSS_DP=y
+        CONFIG_QCA_NSS_DRV=y
+        CONFIG_DEVEL=y
+        CONFIG_CCACHE=y
+        EOF
 
     # 12. defconfig
     - name: Make defconfig
