@@ -1,4 +1,4 @@
-name: Build Swaiot CPE-S10 (OpenWrt-IPQ NSS)
+name: Build Swaiot CPE-S10 OpenWrt
 
 on:
   workflow_dispatch:
@@ -8,151 +8,77 @@ on:
 
 env:
   TZ: Asia/Shanghai
-  OPENWRT_DIR: /mnt/openwrt
+  REPO_URL: https://github.com/Jim78778/openwrt-ipq.git
+  REPO_BRANCH: swaiot-s10
+  CONFIG_FILE: ci.config
+  UPLOAD_FIRMWARE: true
 
 jobs:
   build:
     runs-on: ubuntu-22.04
+    timeout-minutes: 180
 
     steps:
-      # 1. Checkout CI repo（ci.config）
-      - name: Checkout CI repo
+      # 1. Checkout 源码
+      - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          repository: ${{ env.REPO_URL }}
+          ref: ${{ env.REPO_BRANCH }}
+          fetch-depth: 0
 
-      # 2. System info
-      - name: System info
-        run: |
-          echo "CPU:" && nproc
-          lscpu | grep -E 'Model name|Core'
-          echo "Memory:" && free -h
-          echo "Disk:" && df -hT
+      # 2. 设置时区
+      - name: Set timezone
+        run: sudo timedatectl set-timezone "$TZ"
 
-      # 3. Cleanup
-      - name: Cleanup environment
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
-          sudo docker image prune -af || true
-          df -hT
-
-      # 4. Install build dependencies
-      - name: Install build dependencies
+      # 3. 安装 OpenWrt 官方推荐依赖
+      - name: Install official dependencies
         run: |
           sudo apt update
           sudo apt install -y \
-            build-essential autoconf automake autopoint bc bison bzip2 ccache \
-            coreutils curl diffutils findutils file flex gawk gettext git gperf \
-            help2man intltool jq libelf-dev libncurses-dev libssl-dev lua5.3 \
-            patch perl python3 python3-distutils rsync subversion unzip wget \
-            zlib1g-dev zstd
+            binutils \
+            bzip2 \
+            diffutils \
+            findutils \
+            flex \
+            gawk \
+            gcc \
+            getopt \
+            grep \
+            make \
+            libc6-dev \
+            zlib1g-dev \
+            perl \
+            python3 \
+            rsync \
+            subversion \
+            unzip \
+            which
 
-          sudo timedatectl set-timezone "$TZ"
-
-      # 5. Prepare /mnt
-      - name: Prepare workspace
+      # 4. 更新 feeds
+      - name: Update and install feeds
         run: |
-          sudo mkdir -p /mnt
-          sudo chown -R $USER:$USER /mnt
-
-      # 6. Clone openwrt-ipq fork
-      - name: Clone openwrt-ipq fork
-        run: |
-          git clone -b swaiot-s10 https://github.com/Jim78778/openwrt-ipq.git $OPENWRT_DIR
-          cd $OPENWRT_DIR
-          ./scripts/getver.sh
-
-      # 7. Fix feeds (remove duplicate nss_packages)
-      - name: Fix feeds
-        run: |
-          cd $OPENWRT_DIR
-          cp feeds.conf.default feeds.conf.default.bak || true
-          sed -i '/^src-git nss_packages/d' feeds.conf.default
-          echo 'src-git nss_packages https://github.com/openwrt/nss-packages.git;master' >> feeds.conf.default
-
-      # 8. Add QModem feed
-      - name: Add QModem feed
-        run: |
-          cd $OPENWRT_DIR
-          grep -q '^src-git qmodem' feeds.conf.default || \
-            echo 'src-git qmodem https://github.com/FUjr/QModem.git;main' >> feeds.conf.default
-
-      # 9. Update & install feeds
-      - name: Update feeds
-        run: |
-          cd $OPENWRT_DIR
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      # 10. Apply ci.config
-      - name: Apply ci.config
+      # 5. 拷贝配置文件或默认配置
+      - name: Apply config
         run: |
-          cd $OPENWRT_DIR
-          test -f "$GITHUB_WORKSPACE/ci.config"
-          cat "$GITHUB_WORKSPACE/ci.config" >> .config
+          if [ -f "$CONFIG_FILE" ]; then
+            cp "$CONFIG_FILE" .config
+          else
+            make defconfig
+          fi
 
-      # 11. Force target + MBIM only (T99W373)
-      - name: Force Swaiot CPE-S10 + MBIM
+      # 6. 编译
+      - name: Build firmware
         run: |
-          cd $OPENWRT_DIR
-          sed -i '/^CONFIG_TARGET_/d' .config
-          cat >> .config << 'EOF'
-          CONFIG_TARGET_qualcommax=y
-          CONFIG_TARGET_qualcommax_ipq807x=y
-          CONFIG_TARGET_qualcommax_ipq807x_DEVICE_swaiot_cpe_s10=y
-          
-          # MBIM ONLY (Foxconn T99W373)
-          CONFIG_PACKAGE_kmod-mhi-wwan=y
-          CONFIG_PACKAGE_kmod-mhi-wwan-mbim=y
-          CONFIG_PACKAGE_kmod-mhi-wwan-ctrl=y
-          
-          # Disable ECM / rmnet (non-fatal)
-          # CONFIG_PACKAGE_kmod-qca-nss-ecm is not set
-          # CONFIG_PACKAGE_kmod-qca-nss-rmnet is not set
-          
-          CONFIG_QCA_NSS_DRV=y
-          CONFIG_QCA_NSS_DP=y
-          CONFIG_DEVEL=y
-          CONFIG_CCACHE=y
-          EOF
+          make -j$(nproc) V=s
 
-      # 12. Make defconfig
-      - name: Make defconfig
-        run: |
-          cd $OPENWRT_DIR
-          make defconfig
-          grep swaiot_cpe_s10 .config
-
-      # 13. Download sources
-      - name: Download packages
-        run: |
-          cd $OPENWRT_DIR
-          make download -j$(nproc)
-          find dl -size -1024c -delete
-
-      # 14. Build NSS drv + dp first
-      - name: Build NSS drv/dp
-        run: |
-          cd $OPENWRT_DIR
-          make package/feeds/nss_packages/qca-nss-drv/compile -j$(nproc) || exit 1
-          make package/feeds/nss_packages/qca-nss-dp/compile -j$(nproc) || exit 1
-
-      # 15. Build ECM (non-fatal)
-      - name: Build ECM (skip if fails)
-        run: |
-          cd $OPENWRT_DIR
-          make package/feeds/nss_packages/qca-nss-ecm/compile -j$(nproc) || \
-            echo "WARNING: ECM build failed, skipped"
-
-      # 16. Build full firmware
-      - name: Build full firmware
-        run: |
-          cd $OPENWRT_DIR
-          make -j$(nproc) || make -j1 V=s
-
-      # 17. Upload firmware artifacts
+      # 7. 上传固件产物
       - name: Upload firmware
-        uses: actions/upload-artifact@v4
+        if: env.UPLOAD_FIRMWARE == 'true'
+        uses: actions/upload-artifact@v3
         with:
-          name: Swaiot-CPE-S10-MBIM
-          path: $OPENWRT_DIR/bin/targets/qualcommax/ipq807x/*
-          if-no-files-found: error
-
+          name: firmware
+          path: bin/targets/
