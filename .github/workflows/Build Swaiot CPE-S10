@@ -1,0 +1,132 @@
+name: Build Swaiot CPE-S10 (openwrt-ipq NSS)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - swaiot-s10  # 你的分支名
+
+env:
+  TZ: Asia/Shanghai
+  OPENWRT_DIR: /mnt/openwrt
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    # 1. Checkout CI repo（ci.config）
+    - name: Checkout CI repo
+      uses: actions/checkout@v4
+
+    # 2. System info
+    - name: System info
+      run: |
+        echo "CPU:" && nproc
+        lscpu | grep -E 'Model name|Core'
+        echo "Memory:" && free -h
+        echo "Disk:" && df -hT
+
+    # 3. Cleanup
+    - name: Cleanup environment
+      run: |
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+        sudo docker image prune -af || true
+        df -hT
+
+    # 4. Install build dependencies
+    - name: Install build dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y \
+          ack antlr3 asciidoc autoconf automake autopoint binutils \
+          bison build-essential bzip2 ccache clang cmake cpio curl \
+          device-tree-compiler flex gawk gettext git gperf help2man \
+          intltool libelf-dev libncurses-dev libssl-dev python3 \
+          python3-distutils rsync unzip wget zlib1g-dev zstd
+        sudo timedatectl set-timezone "$TZ"
+
+    # 5. Prepare /mnt
+    - name: Prepare workspace
+      run: |
+        sudo mkdir -p /mnt
+        sudo chown -R $USER:$USER /mnt
+
+    # 6. Clone your fork (swaiot-s10)
+    - name: Clone openwrt-ipq fork
+      run: |
+        git clone -b swaiot-s10 https://github.com/Jim78778/openwrt-ipq.git $OPENWRT_DIR
+        cd $OPENWRT_DIR
+        ./scripts/getver.sh
+
+    # 7. Verify target base
+    - name: Verify qualcommax target
+      run: |
+        cd $OPENWRT_DIR
+        ls target/linux/qualcommax >/dev/null
+
+    # 8. Add QModem feed
+    - name: Add QModem feed
+      run: |
+        cd $OPENWRT_DIR
+        grep -q '^src-git qmodem' feeds.conf.default || \
+          echo 'src-git qmodem https://github.com/FUjr/QModem.git;main' >> feeds.conf.default
+
+    # 9. Update & install feeds
+    - name: Update feeds
+      run: |
+        cd $OPENWRT_DIR
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+
+    # 10. Apply ci.config
+    - name: Apply ci.config
+      run: |
+        cd $OPENWRT_DIR
+        test -f "$GITHUB_WORKSPACE/ci.config" || exit 1
+        cat "$GITHUB_WORKSPACE/ci.config" >> .config
+
+    # 11. Force Swaiot CPE-S10 + NSS
+    - name: Force target & NSS options
+      run: |
+        cd $OPENWRT_DIR
+        sed -i '/^CONFIG_TARGET_/d' .config
+        cat >> .config << 'EOF'
+CONFIG_TARGET_qualcommax=y
+CONFIG_TARGET_qualcommax_ipq807x=y
+CONFIG_TARGET_qualcommax_ipq807x_DEVICE_swaiot_cpe_s10=y
+
+CONFIG_NSS_ECM=y
+CONFIG_QCA_NSS_DP=y
+CONFIG_QCA_NSS_DRV=y
+
+CONFIG_DEVEL=y
+CONFIG_CCACHE=y
+EOF
+
+    # 12. defconfig
+    - name: Make defconfig
+      run: |
+        cd $OPENWRT_DIR
+        make defconfig
+        grep swaiot_cpe_s10 .config || exit 1
+
+    # 13. Download sources
+    - name: Download packages
+      run: |
+        cd $OPENWRT_DIR
+        make download -j$(nproc)
+        find dl -size -1024c -delete
+
+    # 14. Build firmware
+    - name: Build firmware
+      run: |
+        cd $OPENWRT_DIR
+        make -j$(nproc) || make -j1 V=s
+
+    # 15. Upload firmware artifacts
+    - name: Upload firmware
+      uses: actions/upload-artifact@v4
+      with:
+        name: Swaiot-CPE-S10-NSS
+        path: $OPENWRT_DIR/bin/targets/qualcommax/ipq807x/*
