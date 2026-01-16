@@ -11,74 +11,53 @@ env:
   REPO_URL: https://github.com/Jim78778/openwrt-ipq.git
   REPO_BRANCH: swaiot-s10
   CONFIG_FILE: ci.config
+  FEEDS_CONF: feeds.conf.default
   UPLOAD_FIRMWARE: true
 
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 180
 
     steps:
-      # 1. Checkout 源码
-      - name: Checkout source
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.REPO_URL }}
-          ref: ${{ env.REPO_BRANCH }}
-          fetch-depth: 0
+    # 1. Checkout repo
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        repository: Jim78778/openwrt-ipq
+        ref: swaiot-s10
 
-      # 2. 设置时区
-      - name: Set timezone
-        run: sudo timedatectl set-timezone "$TZ"
+    # 2. Set timezone
+    - name: Set Timezone
+      run: sudo timedatectl set-timezone "$TZ"
 
-      # 3. 安装 OpenWrt 官方推荐依赖
-      - name: Install official dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y \
-            binutils \
-            bzip2 \
-            diffutils \
-            findutils \
-            flex \
-            gawk \
-            gcc \
-            getopt \
-            grep \
-            make \
-            libc6-dev \
-            zlib1g-dev \
-            perl \
-            python3 \
-            rsync \
-            subversion \
-            unzip \
-            which
+    # 3. Install build dependencies
+    - name: Install Build Dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential binutils bzip2 diffutils findutils flex gawk \
+          gcc git gettext libncurses5-dev libz-dev libc6-dev make perl python3 rsync \
+          subversion unzip wget which time bc 
 
-      # 4. 更新 feeds
-      - name: Update and install feeds
-        run: |
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
+    # 4. Prepare feeds (includes QModem)
+    - name: Update & Install Feeds
+      run: |
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
 
-      # 5. 拷贝配置文件或默认配置
-      - name: Apply config
-        run: |
-          if [ -f "$CONFIG_FILE" ]; then
-            cp "$CONFIG_FILE" .config
-          else
-            make defconfig
-          fi
+    # 5. Copy ci.config
+    - name: Copy ci.config
+      run: cp ${{ env.CONFIG_FILE }} .config
 
-      # 6. 编译
-      - name: Build firmware
-        run: |
-          make -j$(nproc) V=s
+    # 6. Build firmware
+    - name: Build Firmware
+      run: |
+        make defconfig
+        make -j$(nproc) V=s
 
-      # 7. 上传固件产物
-      - name: Upload firmware
-        if: env.UPLOAD_FIRMWARE == 'true'
-        uses: actions/upload-artifact@v3
-        with:
-          name: firmware
-          path: bin/targets/
+    # 7. Upload artifacts
+    - name: Upload Firmware Artifacts
+      if: ${{ env.UPLOAD_FIRMWARE == 'true' }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: Swaiot-CPE-S10-Firmware
+        path: bin/targets/qualcommax/ipq807x/
