@@ -71,7 +71,6 @@ jobs:
           cd $OPENWRT_DIR
 
           # 替换 feed 为已知兼容版本
-          cp feeds.conf.default feeds.conf.default.backup || true
           sed -i 's|src-git nss_packages.*|src-git nss_packages https://github.com/openwrt/nss-packages.git;master|' feeds.conf.default
           echo "src-git nss_packages https://github.com/openwrt/nss-packages.git;1b9a2c3d4e5f67890a1b2c3d4e5f67890a1b2c3d" >> feeds.conf.default
 
