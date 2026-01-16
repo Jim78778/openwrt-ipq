@@ -25,6 +25,10 @@ endef
 # Please send a mail with your device-specific board files upstream.
 # You can find instructions and examples on the linux-wireless wiki:
 # <https://wireless.wiki.kernel.org/en/users/drivers/ath10k/boardfiles>
+ALLWIFIBOARDS+= cpe_s10_sky
+$(eval $(call generate-ipq-wifi-package,cpe_s10_sky,Swaiot CPE-S10))
+
+
 
 ALLWIFIBOARDS:= \
 	8devices_mango \
