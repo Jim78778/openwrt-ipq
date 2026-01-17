@@ -1,18 +1,10 @@
-# base feeds (MUST match qosmio/openwrt-ipq)
-src-git packages https://github.com/qosmio/packages.git
-src-git luci https://github.com/qosmio/luci.git
-src-git routing https://github.com/qosmio/routing.git
-src-git telephony https://github.com/qosmio/telephony.git
-
-# NSS acceleration related
+src-git packages https://git.openwrt.org/feed/packages.git
+src-git luci https://git.openwrt.org/project/luci.git
+src-git routing https://git.openwrt.org/feed/routing.git
+src-git telephony https://git.openwrt.org/feed/telephony.git
 src-git nss_packages https://github.com/qosmio/nss-packages.git;NSS-12.5-K6.x
 src-git sqm_scripts_nss https://github.com/qosmio/sqm-scripts-nss.git
-
-# optional
 src-git video https://github.com/openwrt/video.git
-
-# QModem
-src-git qmodem https://github.com/FUjr/QModem.git;main
-
-# 可选：根据需要添加
-# src-git adguardhome https://github.com/kongfl888/luci-app-adguardhome.git;main
+#src-git targets https://github.com/openwrt/targets.git
+#src-git oldpackages http://git.openwrt.org/packages.git
+#src-link custom /usr/src/openwrt/custom-feed
