@@ -46,8 +46,8 @@ jobs:
         AVAIL=$(df -BG /mnt | tail -1 | awk '{print $4}' | sed 's/G//')
         echo "Available /mnt space: ${AVAIL}G"
 
-        if [ "$AVAIL" -lt 80 ]; then
-          echo "::error::Not enough disk space on /mnt (<80G)"
+        if [ "$AVAIL" -lt 50 ]; then
+          echo "::error::Not enough disk space on /mnt (<50G)"
           exit 1
         fi
 
