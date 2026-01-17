@@ -1,4 +1,4 @@
-name: Build Swaiot CPE-S10 OpenWrt
+name: Build Swaiot CPE-S10 (ipq807x NSS)
 
 on:
   workflow_dispatch:
@@ -8,60 +8,148 @@ on:
 
 env:
   TZ: Asia/Shanghai
-  REPO_URL: https://github.com/Jim78778/openwrt-ipq.git
-  REPO_BRANCH: swaiot-s10
+  REPO_URL: https://github.com/qosmio/openwrt-ipq.git
+  REPO_BRANCH: master
   CONFIG_FILE: ci.config
   FEEDS_CONF: feeds.conf.default
   UPLOAD_FIRMWARE: true
+  OPENWRT_DIR: /mnt/openwrt
 
 jobs:
   build:
     runs-on: ubuntu-22.04
 
     steps:
-    # 1. Checkout repo
-    - name: Checkout Repository
+    # ==================================================
+    # 1. Checkout workflow repo（ci.config / feeds）
+    # ==================================================
+    - name: Checkout workflow repo
       uses: actions/checkout@v4
-      with:
-        repository: Jim78778/openwrt-ipq
-        ref: swaiot-s10
 
-    # 2. Set timezone
-    - name: Set Timezone
+    # ==================================================
+    # 2. Runner & Disk validation（关键）
+    # ==================================================
+    - name: Validate runner & disk
+      run: |
+        echo "== OS Info =="
+        uname -a
+        lsb_release -a || true
+
+        echo "== Disk Info =="
+        df -h
+
+        if [ ! -d /mnt ]; then
+          echo "::error::/mnt does not exist"
+          exit 1
+        fi
+
+        AVAIL=$(df -BG /mnt | tail -1 | awk '{print $4}' | sed 's/G//')
+        echo "Available /mnt space: ${AVAIL}G"
+
+        if [ "$AVAIL" -lt 80 ]; then
+          echo "::error::Not enough disk space on /mnt (<80G)"
+          exit 1
+        fi
+
+    # ==================================================
+    # 3. Set timezone
+    # ==================================================
+    - name: Set timezone
       run: sudo timedatectl set-timezone "$TZ"
 
-    # 3. Install build dependencies
-    - name: Install Build Dependencies
+    # ==================================================
+    # 4. Free disk space
+    # ==================================================
+    - name: Free disk space
       run: |
-       sudo apt update
-       sudo apt install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
-       bzip2 ccache clang clangd cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib \
-       g++-multilib git gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev libglib2.0-dev \
-       libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5 libncursesw5-dev libreadline-dev \
-       libssl-dev libtool lld lldb lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 \
-       python3 python3-pip python3-ply python3-docutils qemu-utils re2c rsync scons squashfs-tools subversion swig \
-       texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+        sudo apt-get clean
+        df -h
 
-    # 4. Prepare feeds (includes QModem)
-    - name: Update & Install Feeds
+    # ==================================================
+    # 5. Install build dependencies
+    # ==================================================
+    - name: Install build dependencies
       run: |
+        sudo apt update
+        sudo apt install -y \
+          ack antlr3 asciidoc autoconf automake autopoint binutils bison \
+          build-essential bzip2 ccache clang cmake cpio curl \
+          device-tree-compiler ecj fastjar flex gawk gettext \
+          gcc-multilib g++-multilib git gperf haveged help2man \
+          intltool lib32gcc-s1 libc6-dev-i386 libelf-dev \
+          libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev \
+          libmpfr-dev libncurses5-dev libncursesw5-dev \
+          libreadline-dev libssl-dev libtool lld lrzsz \
+          mkisofs msmtp nano ninja-build p7zip p7zip-full \
+          patch pkgconf python3 python3-pip python3-ply \
+          python3-docutils qemu-utils re2c rsync scons \
+          squashfs-tools subversion swig texinfo uglifyjs \
+          upx-ucl unzip vim wget xmlto xxd zlib1g-dev
+
+    # ==================================================
+    # 6. Clone openwrt-ipq to /mnt（重点）
+    # ==================================================
+    - name: Clone openwrt-ipq to /mnt
+      run: |
+        sudo mkdir -p $OPENWRT_DIR
+        sudo chown $USER:$USER /mnt
+        git clone --depth=1 -b $REPO_BRANCH $REPO_URL $OPENWRT_DIR
+
+    # ==================================================
+    # 7. Prepare feeds
+    # ==================================================
+    - name: Update & install feeds
+      run: |
+        cd $OPENWRT_DIR
+        cp $GITHUB_WORKSPACE/$FEEDS_CONF feeds.conf.default
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    # 5. Copy ci.config
-    - name: Copy ci.config
-      run: cp ${{ env.CONFIG_FILE }} .config
-
-    # 6. Build firmware
-    - name: Build Firmware
+    # ==================================================
+    # 8. Fix QModem fake deps
+    # ==================================================
+    - name: Fix QModem dependency issues
       run: |
+        cd $OPENWRT_DIR
+        sed -i \
+          -e 's/kmod-mhi-wwan/kmod-usb-net-qmi-wwan/g' \
+          -e 's/quectel-CM-5G//g' \
+          -e 's/quectel-cm//g' \
+          package/feeds/qmodem/qmodem/Makefile
+
+    # ==================================================
+    # 9. Load ci.config
+    # ==================================================
+    - name: Load ci.config
+      run: |
+        cd $OPENWRT_DIR
+        cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
         make defconfig
+
+    # ==================================================
+    # 10. Download sources
+    # ==================================================
+    - name: Download packages
+      run: |
+        cd $OPENWRT_DIR
+        make download -j$(nproc) V=s
+
+    # ==================================================
+    # 11. Build firmware
+    # ==================================================
+    - name: Build firmware
+      run: |
+        cd $OPENWRT_DIR
         make -j$(nproc) V=s
 
-    # 7. Upload artifacts
-    - name: Upload Firmware Artifacts
-      if: ${{ env.UPLOAD_FIRMWARE == 'true' }}
+    # ==================================================
+    # 12. Upload firmware
+    # ==================================================
+    - name: Upload firmware
+      if: env.UPLOAD_FIRMWARE == 'true'
       uses: actions/upload-artifact@v4
       with:
-        name: Swaiot-CPE-S10-Firmware
-        path: bin/targets/qualcommax/ipq807x/
+        name: Swaiot-CPE-S10-ipq807x-NSS
+        path: |
+          ${{ env.OPENWRT_DIR }}/bin/targets/qualcommax/ipq807x/
