@@ -9,7 +9,7 @@ on:
 env:
   TZ: Asia/Shanghai
   REPO_URL: https://github.com/qosmio/openwrt-ipq.git
-  REPO_BRANCH: master
+  REPO_BRANCH: main
   CONFIG_FILE: ci.config
   FEEDS_CONF: feeds.conf.default
   UPLOAD_FIRMWARE: true
