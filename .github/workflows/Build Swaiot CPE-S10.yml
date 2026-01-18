@@ -128,34 +128,7 @@ jobs:
         make defconfig
 
     - name: Debug NSS config
-    run: |
-      cd $OPENWRT_DIR
-      echo "===== NSS / qca-nss config ====="
-      grep -E "NSS|qca-nss" .config || true
-
-    # ==================================================
-    # 10. Download sources
-    # ==================================================
-    - name: Download packages
       run: |
         cd $OPENWRT_DIR
-        make download -j$(nproc) V=s
-
-    # ==================================================
-    # 11. Build firmware
-    # ==================================================
-    - name: Build firmware
-      run: |
-        cd $OPENWRT_DIR
-        make -j$(nproc) V=s
-
-    # ==================================================
-    # 12. Upload firmware
-    # ==================================================
-    - name: Upload firmware
-      if: env.UPLOAD_FIRMWARE == 'true'
-      uses: actions/upload-artifact@v4
-      with:
-        name: Swaiot-CPE-S10-ipq807x-NSS
-        path: |
-          ${{ env.OPENWRT_DIR }}/bin/targets/qualcommax/ipq807x/
+        echo "===== NSS / qca-nss config ====="
+        grep -E "NSS|qca-nss" .config || true
