@@ -88,15 +88,6 @@ jobs:
           upx-ucl unzip vim wget xmlto xxd zlib1g-dev
 
     # ==================================================
-    # 6. Clone openwrt-ipq to /mnt（重点）
-    # ==================================================
-    - name: Clone openwrt-ipq to /mnt
-      run: |
-        sudo mkdir -p $OPENWRT_DIR
-        sudo chown $USER:$USER /mnt
-        git clone --depth=1 -b $REPO_BRANCH $REPO_URL $OPENWRT_DIR
-
-    # ==================================================
     # 7. Prepare feeds
     # ==================================================
     - name: Update & install feeds
@@ -105,18 +96,6 @@ jobs:
         cp $GITHUB_WORKSPACE/$FEEDS_CONF feeds.conf.default
         ./scripts/feeds update -a
         ./scripts/feeds install -a
-
-    # ==================================================
-    # 8. Fix QModem fake deps
-    # ==================================================
-    - name: Fix QModem dependency issues
-      run: |
-        cd $OPENWRT_DIR
-        sed -i \
-          -e 's/kmod-mhi-wwan/kmod-usb-net-qmi-wwan/g' \
-          -e 's/quectel-CM-5G//g' \
-          -e 's/quectel-cm//g' \
-          package/feeds/qmodem/qmodem/Makefile
 
     # ==================================================
     # 9. Load ci.config
