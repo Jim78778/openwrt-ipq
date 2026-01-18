@@ -127,6 +127,12 @@ jobs:
         cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
         make defconfig
 
+    - name: Debug NSS config
+    run: |
+      cd $OPENWRT_DIR
+      echo "===== NSS / qca-nss config ====="
+      grep -E "NSS|qca-nss" .config || true
+
     # ==================================================
     # 10. Download sources
     # ==================================================
