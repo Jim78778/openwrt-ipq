@@ -224,5 +224,5 @@
 
 &wifi {
 	status = "okay";
-	qcom,ath11k-calibration-variant = "swaiot-cpe-s10";
+	qcom,ath11k-calibration-variant = "cpe_s10_sky";
 };
