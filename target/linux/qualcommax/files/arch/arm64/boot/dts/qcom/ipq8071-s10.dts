@@ -360,8 +360,8 @@
 
 				led@0 {
 					reg = <0>;
-					color = <1>; /* LED_COLOR_ID_GREEN 的值为 1 */
-					function = "wan"; /* LED_FUNCTION_WAN 的字符串值 */
+					color = <LED_COLOR_ID_GREEN>;
+					function = LED_FUNCTION_WAN;
 					default-state = "keep";
 				};
 			};
