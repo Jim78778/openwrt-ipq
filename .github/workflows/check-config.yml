@@ -8,16 +8,27 @@ on:
 
 jobs:
   check-config:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     env:
       OPENWRT_DIR: ${{ github.workspace }}/openwrt
 
     steps:
-      # 1️⃣ Checkout code
+      # 1️⃣ 检出代码
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Prepare OpenWrt directory
+      # 2️⃣ 确保 openwrt 目录存在
+      - name: Ensure OpenWrt directory
+        run: |
+          mkdir -p "$OPENWRT_DIR"
+
+      # 3️⃣ 拷贝 ci.config 生成 .config
+      - name: Copy ci.config to .config
+        run: |
+          cp ci.config "$OPENWRT_DIR/.config"
+          echo ".config copied to $OPENWRT_DIR"
+
+      # 4️⃣ 检查 .config 是否存在
       - name: Ensure .config exists
         run: |
           if [ ! -f "$OPENWRT_DIR/.config" ]; then
@@ -25,18 +36,18 @@ jobs:
             exit 1
           fi
 
-      # 3️⃣ Count selected packages
-      - name: Count enabled packages
+      # 5️⃣ 提取已启用的 package 并统计
+      - name: Extract enabled packages
         run: |
           echo "== Enabled packages in .config =="
-          grep -E '^CONFIG_PACKAGE_' "$OPENWRT_DIR/.config" | grep '=y' | sort > enabled_packages.txt
-          grep -E '^CONFIG_PACKAGE_' "$OPENWRT_DIR/.config" | grep '=m' | sort >> enabled_packages.txt
+          grep -E '^CONFIG_PACKAGE_' "$OPENWRT_DIR/.config" | grep -E '=y|=m' | sort > enabled_packages.txt
           cat enabled_packages.txt
           echo "Total enabled packages: $(wc -l < enabled_packages.txt)"
 
-      # 4️⃣ Optional: save as artifact
-      - name: Upload package list
-        uses: actions/upload-artifact@v3
+      # 6️⃣ 上传 artifact（保留 7 天）
+      - name: Upload enabled package list
+        uses: actions/upload-artifact@v4
         with:
-          name: enabled-packages
+          name: enabled-packages-list
           path: enabled_packages.txt
+          retention-days: 7
