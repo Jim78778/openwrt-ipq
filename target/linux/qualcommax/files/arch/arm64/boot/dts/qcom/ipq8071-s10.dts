@@ -1,228 +1,216 @@
-// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
+// SPDX-License-Identifier: GPL-2.0
 /dts-v1/;
 
 #include "ipq8074.dtsi"
-#include "ipq8074-ac-cpu.dtsi"
-#include "ipq8074-ess.dtsi"
-#include "ipq8074-nss.dtsi"
-
-#include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
-#include <dt-bindings/leds/common.h>
 
 / {
-	model = "CPE S10-SKY";
-	compatible = "cpe,s10", "qcom,ipq8074", "qcom,ipq8074-ac02";
+	model = "Swaiot / Skyworth CPE-S10";
+	compatible = "swaiot,cpe-s10-sky", "qcom,ipq8074";
 
 	aliases {
-		serial0 = &blsp1_uart5;
-
-		ethernet0 = &dp5;
-		ethernet1 = &dp4;
-		ethernet2 = &dp3;
-		ethernet3 = &dp2;
+		serial0 = &blsp1_uart3;
+		ethernet0 = &dp1;
 	};
 
 	chosen {
 		stdout-path = "serial0:115200n8";
-		bootargs-append = " root=/dev/ubiblock0_1 swiotlb=1 coherent_pool=2M";
+		bootargs-append = " rootfstype=squashfs";
 	};
 
-	keys {
-		compatible = "gpio-keys";
-
-		wps {
-			label = "wps";
-			linux,code = <KEY_WPS_BUTTON>;
-			gpios = <&tlmm 50 GPIO_ACTIVE_LOW>;
-		};
-
-		reset {
-			label = "reset";
-			linux,code = <KEY_RESTART>;
-			gpios = <&tlmm 34 GPIO_ACTIVE_LOW>;
-		};
-	};
-
-	leds {
-		compatible = "gpio-leds";
-
-		4gyellow { label = "4gyellow"; gpios = <&tlmm 42 GPIO_ACTIVE_HIGH>; };
-		4gblue   { label = "4gblue";   gpios = <&tlmm 43 GPIO_ACTIVE_HIGH>; };
-		blue     { label = "blue";     gpios = <&tlmm 51 GPIO_ACTIVE_LOW>; };
-		red      { label = "red";      gpios = <&tlmm 52 GPIO_ACTIVE_LOW>; };
-		ethblue  { label = "ethblue";  gpios = <&tlmm 55 GPIO_ACTIVE_LOW>; };
-		ethyellow{ label = "ethyellow";gpios = <&tlmm 56 GPIO_ACTIVE_LOW>; };
-		5gblue   { label = "5gblue";   gpios = <&tlmm 63 GPIO_ACTIVE_HIGH>; };
-		5gyellow { label = "5gyellow"; gpios = <&tlmm 64 GPIO_ACTIVE_HIGH>; };
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0x0 0x40000000 0x0 0x40000000>; /* 1GB */
 	};
 };
 
-/* ================= GPIO / PINCTRL ================= */
-
-&tlmm {
-	mdio_pins: mdio-pins {
-		mdc {
-			pins = "gpio68";
-			function = "mdc";
-			drive-strength = <8>;
-			bias-pull-up;
-		};
-		mdio {
-			pins = "gpio69";
-			function = "mdio";
-			drive-strength = <8>;
-			bias-pull-up;
-		};
-	};
-};
-
-/* ================= UART / SPI ================= */
-
-&blsp1_uart5 { status = "okay"; };
-
-&blsp1_spi1 {
+/* =========================
+ * UART（必须，救砖）
+ * ========================= */
+&blsp1_uart3 {
 	status = "okay";
-	pinctrl-0 = <&spi_0_pins>;
-	pinctrl-names = "default";
-	cs-select = <0>;
-
-	flash@0 {
-		compatible = "jedec,spi-nor";
-		reg = <0>;
-		spi-max-frequency = <50000000>;
-	};
 };
 
-/* ================= CRYPTO / RNG ================= */
-
-&cryptobam { status = "okay"; };
-&crypto    { status = "okay"; };
-&prng      { status = "okay"; };
-
-/* ================= NAND (FIXED PARTITIONS) ================= */
-
-&qpic_bam { status = "okay"; };
-
-&qpic_nand {
+/* =========================
+ * NAND / MTD（严格按你 /proc/mtd）
+ * ========================= */
+&qcom_nand {
 	status = "okay";
 
-	nand@0 {
-		reg = <0>;
-		nand-bus-width = <8>;
-		nand-ecc-strength = <4>;
-		nand-ecc-step-size = <512>;
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
 
-		partitions {
-			compatible = "fixed-partitions";
-			#address-cells = <1>;
-			#size-cells = <1>;
-
-			partition@0 {
-				label = "rootfs";
-				reg = <0x00000000 0x0fa00000>;
-			};
-
-			partition@fa00000 { label = "0:SBL1";        reg = <0x0fa00000 0x00050000>; read-only; };
-			partition@fa50000 { label = "0:MIBIB";       reg = <0x0fa50000 0x00010000>; read-only; };
-			partition@fa60000 { label = "0:BOOTCONFIG";  reg = <0x0fa60000 0x00020000>; read-only; };
-			partition@fa80000 { label = "0:BOOTCONFIG1"; reg = <0x0fa80000 0x00020000>; read-only; };
-			partition@faa0000 { label = "0:QSEE";        reg = <0x0faa0000 0x00180000>; read-only; };
-			partition@fc20000 { label = "0:QSEE_1";      reg = <0x0fc20000 0x00180000>; read-only; };
-			partition@fda0000 { label = "0:DEVCFG";      reg = <0x0fda0000 0x00010000>; read-only; };
-			partition@fdb0000 { label = "0:DEVCFG_1";    reg = <0x0fdb0000 0x00010000>; read-only; };
-			partition@fdc0000 { label = "0:APDP";        reg = <0x0fdc0000 0x00010000>; read-only; };
-			partition@fdd0000 { label = "0:APDP_1";      reg = <0x0fdd0000 0x00010000>; read-only; };
-			partition@fde0000 { label = "0:RPM";         reg = <0x0fde0000 0x00040000>; read-only; };
-			partition@fe20000 { label = "0:RPM_1";       reg = <0x0fe20000 0x00040000>; read-only; };
-			partition@fe60000 { label = "0:CDT";         reg = <0x0fe60000 0x00010000>; read-only; };
-			partition@fe70000 { label = "0:CDT_1";       reg = <0x0fe70000 0x00010000>; read-only; };
-			partition@fe80000 { label = "0:APPSBLENV";   reg = <0x0fe80000 0x00010000>; };
-			partition@fe90000 { label = "0:APPSBL";      reg = <0x0fe90000 0x000a0000>; read-only; };
-			partition@ff30000 { label = "0:APPSBL_1";    reg = <0x0ff30000 0x000a0000>; read-only; };
-			partition@ffd0000 { label = "0:ART";         reg = <0x0ffd0000 0x00040000>; read-only; };
-			partition@10010000{ label = "0:ETHPHYFW";    reg = <0x10010000 0x00080000>; read-only; };
-			partition@10090000{ label = "ledeinfo";      reg = <0x10090000 0x00010000>; };
-			partition@100a0000{ label = "reserve";       reg = <0x100a0000 0x00010000>; };
+		partition@0 {
+			label = "rootfs";
+			reg = <0x00000000 0x0fa00000>;
 		};
-	};
-};
 
-/* ================= USB / PCIe ================= */
+		partition@fa00000 {
+			label = "0:SBL1";
+			reg = <0x0fa00000 0x00050000>;
+			read-only;
+		};
 
-&qusb_phy_0 { status = "okay"; };
-&qusb_phy_1 { status = "okay"; };
-&ssphy_0    { status = "okay"; };
-&ssphy_1    { status = "okay"; };
-&usb_0      { status = "okay"; };
-&usb_1      { status = "okay"; };
+		partition@fa50000 {
+			label = "0:MIBIB";
+			reg = <0x0fa50000 0x00010000>;
+			read-only;
+		};
 
-&pcie_qmp0 { status = "okay"; };
-&pcie0     { status = "okay"; };
+		partition@fa60000 {
+			label = "0:BOOTCONFIG";
+			reg = <0x0fa60000 0x00020000>;
+			read-only;
+		};
 
-/* ================= MDIO / SWITCH ================= */
+		partition@fa80000 {
+			label = "0:BOOTCONFIG1";
+			reg = <0x0fa80000 0x00020000>;
+			read-only;
+		};
 
-&mdio {
-	status = "okay";
-	pinctrl-0 = <&mdio_pins>;
-	pinctrl-names = "default";
-	reset-gpios = <&tlmm 37 GPIO_ACTIVE_LOW>;
+		partition@faa0000 {
+			label = "0:QSEE";
+			reg = <0x0faa0000 0x00180000>;
+			read-only;
+		};
 
-	ethernet-phy-package@0 {
-		compatible = "qcom,qca8075-package";
-		reg = <0>;
-		qcom,package-mode = "qsgmii";
+		partition@fc20000 {
+			label = "0:QSEE_1";
+			reg = <0x0fc20000 0x00180000>;
+			read-only;
+		};
 
-		qca8075_0: ethernet-phy@0 { reg = <0>; };
-		qca8075_1: ethernet-phy@1 { reg = <1>; };
-		qca8075_2: ethernet-phy@2 { reg = <2>; };
-		qca8075_3: ethernet-phy@3 { reg = <3>; };
+		partition@fda0000 {
+			label = "0:DEVCFG";
+			reg = <0x0fda0000 0x00010000>;
+			read-only;
+		};
 
-		qca8081: ethernet-phy@24 {
-			compatible = "ethernet-phy-id004d.d101";
-			reg = <24>;
-			reset-gpios = <&tlmm 85 GPIO_ACTIVE_LOW>;
-			reset-deassert-us = <10000>;
+		partition@fdb0000 {
+			label = "0:DEVCFG_1";
+			reg = <0x0fdb0000 0x00010000>;
+			read-only;
+		};
+
+		partition@fdc0000 {
+			label = "0:APDP";
+			reg = <0x0fdc0000 0x00010000>;
+			read-only;
+		};
+
+		partition@fdd0000 {
+			label = "0:APDP_1";
+			reg = <0x0fdd0000 0x00010000>;
+			read-only;
+		};
+
+		partition@fde0000 {
+			label = "0:RPM";
+			reg = <0x0fde0000 0x00040000>;
+			read-only;
+		};
+
+		partition@fe20000 {
+			label = "0:RPM_1";
+			reg = <0x0fe20000 0x00040000>;
+			read-only;
+		};
+
+		partition@fe60000 {
+			label = "0:CDT";
+			reg = <0x0fe60000 0x00010000>;
+			read-only;
+		};
+
+		partition@fe70000 {
+			label = "0:CDT_1";
+			reg = <0x0fe70000 0x00010000>;
+			read-only;
+		};
+
+		partition@fe80000 {
+			label = "0:APPSBLENV";
+			reg = <0x0fe80000 0x00010000>;
+			read-only;
+		};
+
+		partition@fe90000 {
+			label = "0:APPSBL";
+			reg = <0x0fe90000 0x000a0000>;
+			read-only;
+		};
+
+		partition@ff30000 {
+			label = "0:APPSBL_1";
+			reg = <0x0ff30000 0x000a0000>;
+			read-only;
+		};
+
+		partition@ffd0000 {
+			label = "0:ART";
+			reg = <0x0ffd0000 0x00040000>;
+			read-only;
+		};
+
+		partition@10010000 {
+			label = "0:ETHPHYFW";
+			reg = <0x10010000 0x00080000>;
+			read-only;
+		};
+
+		partition@10090000 {
+			label = "ledeinfo";
+			reg = <0x10090000 0x00010000>;
+		};
+
+		partition@100a0000 {
+			label = "reserve";
+			reg = <0x100a0000 0x00010000>;
 		};
 	};
 };
 
-&switch {
+/* =========================
+ * Ethernet（最小可用）
+ * ========================= */
+&dp1 {
 	status = "okay";
-	switch_lan_bmp = <(ESS_PORT1 | ESS_PORT2 | ESS_PORT3 | ESS_PORT4)>;
-	switch_wan_bmp = <ESS_PORT5>;
-	switch_mac_mode  = <MAC_MODE_QSGMII>;
-	switch_mac_mode1 = <MAC_MODE_SGMII_PLUS>;
 };
 
-&edma { status = "okay"; };
-
-/* ================= DATA PORTS ================= */
-
-&dp3 {
+&dp2 {
 	status = "okay";
-	label = "lan2";
-	phy-mode = "qsgmii";
-	phy-handle = <&qca8075_2>;
 };
 
-&dp4 {
-	status = "okay";
-	label = "lan1";
-	phy-mode = "qsgmii";
-	phy-handle = <&qca8075_3>;
-};
-
-&dp5 {
-	status = "okay";
-	label = "wan";
-	phy-mode = "sgmii";
-	phy-handle = <&qca8081>;
-};
-
-/* ================= WIFI ================= */
-
+/* =========================
+ * Wi-Fi（关键：board-2.bin）
+ * ========================= */
 &wifi {
 	status = "okay";
+
 	qcom,ath11k-calibration-variant = "cpe_s10_sky";
+};
+
+/* =========================
+ * PCIe（给 WWAN / Wi-Fi）
+ * ========================= */
+&pcie0 {
+	status = "okay";
+};
+
+&pcie1 {
+	status = "okay";
+};
+
+/* =========================
+ * USB（调试 & LTE）
+ * ========================= */
+&usb0 {
+	status = "okay";
+};
+
+&usb1 {
+	status = "okay";
 };
