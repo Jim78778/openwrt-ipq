@@ -1,53 +1,66 @@
-name: Check OpenWrt Config Packages
+name: Show CPE-S10 Config and Packages
 
 on:
   workflow_dispatch:
   push:
     branches:
       - main
+      - swaiot-s10
 
 jobs:
-  check-config:
+  show-config:
     runs-on: ubuntu-latest
     env:
       OPENWRT_DIR: ${{ github.workspace }}/openwrt
 
     steps:
-      # 1️⃣ 检出代码
+      # 1️⃣ 检出仓库
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      # 2️⃣ 确保 openwrt 目录存在
+      # 2️⃣ 创建 openwrt 目录
       - name: Ensure OpenWrt directory
         run: |
           mkdir -p "$OPENWRT_DIR"
 
-      # 3️⃣ 拷贝 ci.config 生成 .config
-      - name: Copy ci.config to .config
+      # 3️⃣ 下载 swaiot-s10 分支 .config
+      - name: Download swaiot-s10 .config
         run: |
-          cp ci.config "$OPENWRT_DIR/.config"
-          echo ".config copied to $OPENWRT_DIR"
+          wget https://raw.githubusercontent.com/Jim78778/openwrt-ipq/swaiot-s10/.config -O "$OPENWRT_DIR/.config"
+          echo ".config downloaded to $OPENWRT_DIR/.config"
 
       # 4️⃣ 检查 .config 是否存在
       - name: Ensure .config exists
         run: |
           if [ ! -f "$OPENWRT_DIR/.config" ]; then
-            echo ".config not found in $OPENWRT_DIR"
+            echo "❌ .config not found!"
             exit 1
           fi
+          echo ".config exists, first 20 lines:"
+          head -n20 "$OPENWRT_DIR/.config"
 
-      # 5️⃣ 提取已启用的 package 并统计
+      # 5️⃣ 提取启用 package 并统计数量
       - name: Extract enabled packages
         run: |
-          echo "== Enabled packages in .config =="
-          grep -E '^CONFIG_PACKAGE_' "$OPENWRT_DIR/.config" | grep -E '=y|=m' | sort > enabled_packages.txt
-          cat enabled_packages.txt
-          echo "Total enabled packages: $(wc -l < enabled_packages.txt)"
+          grep -E '^CONFIG_PACKAGE_' "$OPENWRT_DIR/.config" | grep -E '=y|=m' | sort > enabled-packages.txt
+          echo "=== Enabled packages ==="
+          cat enabled-packages.txt
+          echo "Total enabled packages: $(wc -l < enabled-packages.txt)"
 
-      # 6️⃣ 上传 artifact（保留 7 天）
-      - name: Upload enabled package list
+      # 6️⃣ 上传 artifact：完整 .config
+      - name: Upload full .config
         uses: actions/upload-artifact@v4
         with:
-          name: enabled-packages-list
-          path: enabled_packages.txt
+          name: swaiot-s10-full-config
+          path: ${{ env.OPENWRT_DIR }}/.config
+          retention-days: 7
+
+      # 7️⃣ 上传 artifact：已启用 package 列表
+      - name: Upload enabled packages list
+        uses: actions/upload-artifact@v4
+        with:
+          name: swaiot-s10-enabled-packages
+          path: enabled-packages.txt
           retention-days: 7
