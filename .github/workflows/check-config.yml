@@ -1,0 +1,42 @@
+name: Check OpenWrt Config Packages
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  check-config:
+    runs-on: ubuntu-22.04
+    env:
+      OPENWRT_DIR: ${{ github.workspace }}/openwrt
+
+    steps:
+      # 1️⃣ Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2️⃣ Prepare OpenWrt directory
+      - name: Ensure .config exists
+        run: |
+          if [ ! -f "$OPENWRT_DIR/.config" ]; then
+            echo ".config not found in $OPENWRT_DIR"
+            exit 1
+          fi
+
+      # 3️⃣ Count selected packages
+      - name: Count enabled packages
+        run: |
+          echo "== Enabled packages in .config =="
+          grep -E '^CONFIG_PACKAGE_' "$OPENWRT_DIR/.config" | grep '=y' | sort > enabled_packages.txt
+          grep -E '^CONFIG_PACKAGE_' "$OPENWRT_DIR/.config" | grep '=m' | sort >> enabled_packages.txt
+          cat enabled_packages.txt
+          echo "Total enabled packages: $(wc -l < enabled_packages.txt)"
+
+      # 4️⃣ Optional: save as artifact
+      - name: Upload package list
+        uses: actions/upload-artifact@v3
+        with:
+          name: enabled-packages
+          path: enabled_packages.txt
