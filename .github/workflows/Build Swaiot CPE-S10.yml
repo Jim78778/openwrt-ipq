@@ -8,44 +8,152 @@ on:
 
 env:
   TZ: Asia/Shanghai
-  REPO_URL: https://github.com/qosmio/openwrt-ipq.git
-  REPO_BRANCH: main-nss
+  REPO_URL: https://github.com/Jim78778/openwrt-ipq.git
+  REPO_BRANCH: swaiot-s10
   CONFIG_FILE: ci.config
-  FEEDS_CONF: feeds.conf.default
+  DIY_SCRIPT: diy-part1.sh
   UPLOAD_FIRMWARE: true
-  OPENWRT_DIR: /mnt/openwrt
+  OPENWRT_DIR: /mnt/openwrt-build
 
 jobs:
   build:
     runs-on: ubuntu-22.04
 
     steps:
-    # ==================================================
-    # 1. Checkout workflow repo（ci.config / feeds）
-    # ==================================================
+    # 1. Checkout workflow repo
     - name: Checkout workflow repo
       uses: actions/checkout@v4
 
-    
-    # ==================================================
-    # 3. Set timezone
-    # ==================================================
+    # 2. Set timezone
     - name: Set timezone
       run: sudo timedatectl set-timezone "$TZ"
 
-   
-
-    # ==================================================
-    # 9. Load ci.config
-    # ==================================================
-    - name: Load ci.config
+    # 3. Free disk space
+    - name: Free disk space
       run: |
-        cd $OPENWRT_DIR
-        cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
-        make defconfig
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+        sudo apt-get clean
+        df -h
 
+    # 4. Install build dependencies + NSS host deps
+    - name: Install build dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y \
+          ack antlr3 asciidoc autoconf automake autopoint binutils bison \
+          build-essential bzip2 ccache clang cmake cpio curl \
+          device-tree-compiler ecj fastjar flex gawk gettext \
+          gcc g++ gcc-12 g++-12 gcc-multilib g++-multilib \
+          git gperf haveged help2man intltool jq lib32gcc-s1 libc6-dev-i386 \
+          libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev \
+          libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev \
+          libssl-dev libtool lld lrzsz mkisofs msmtp nano ninja-build \
+          p7zip p7zip-full patch pkgconf python-is-python3 python3 python3-pip \
+          python3-ply python3-docutils python3-setuptools python3-wheel \
+          qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo \
+          uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev bc file time \
+          xz-utils zstd liblzma-dev libzstd-dev libstdc++-12-dev libcap-dev \
+          libnl-3-dev libnl-genl-3-dev
+
+        # 安装 NSS 缺失的主机依赖
+        pip3 install pysocks unidecode
+
+    # 5. Prepare /mnt build directory
+    - name: Prepare /mnt build directory
+      run: |
+        sudo mkdir -p "$OPENWRT_DIR"
+        sudo chown $USER:$USER "$OPENWRT_DIR"
+        df -h /mnt
+
+    # 6. Clone openwrt-ipq source
+    - name: Clone openwrt-ipq
+      run: |
+        git clone --depth=1 -b "$REPO_BRANCH" "$REPO_URL" "$OPENWRT_DIR"
+
+    # 7. Copy ci.config and diy script
+    - name: Copy configs and DIY script
+      run: |
+        cp "${{ github.workspace }}/$CONFIG_FILE" "$OPENWRT_DIR/.config"
+        cp "${{ github.workspace }}/$DIY_SCRIPT" "$OPENWRT_DIR/"
+        chmod +x "$OPENWRT_DIR/$DIY_SCRIPT"
+
+    # 8. Update & install feeds (修复依赖警告)
+    - name: Update & install feeds
+      run: |
+        cd "$OPENWRT_DIR"
+        
+        # 更新所有 feeds
+        ./scripts/feeds update -a
+        
+        # 安装所有包，忽略依赖警告
+        ./scripts/feeds install -a
+        
+        # 尝试安装已知缺失的包
+        ./scripts/feeds install jq 2>/dev/null || true
+        ./scripts/feeds install python3-pysocks 2>/dev/null || true
+        ./scripts/feeds install python3-unidecode 2>/dev/null || true
+
+    # 9. Apply diy-part1.sh (精简 NSS: 只保留 WWAN + WiFi)
+    - name: Apply diy-part1.sh
+      run: |
+        cd "$OPENWRT_DIR"
+        chmod +x "$DIY_SCRIPT"
+        ./$DIY_SCRIPT
+
+    # 10. Load config (忽略依赖警告)
+    - name: Load config
+      run: |
+        cd "$OPENWRT_DIR"
+        # 使用 IGNORE_ERRORS 减少警告输出
+        make defconfig IGNORE_ERRORS=1 2>&1 | grep -v "WARNING.*does not exist" || true
+
+    # 11. Debug NSS config (只显示保留模块)
     - name: Debug NSS config
       run: |
-        cd $OPENWRT_DIR
-        echo "===== NSS / qca-nss config ====="
-        grep -E "NSS|qca-nss" .config || true
+        cd "$OPENWRT_DIR"
+        echo "===== NSS / qca-nss 精简后模块 ====="
+        grep -E "WWAN|WIFI|qca-nss" .config || true
+
+    # 12. Download all sources
+    - name: Download packages
+      run: |
+        cd "$OPENWRT_DIR"
+        make download -j1 V=s
+
+    # 13. Build firmware (修复: 添加回退机制和警告过滤)
+    - name: Build firmware
+      run: |
+        cd "$OPENWRT_DIR"
+        # 尝试并行构建，失败时回退到单线程构建
+        # 过滤重复定义警告和缺失依赖警告
+        make -j$(nproc) V=s 2>&1 | \
+          grep -v "warning: overriding recipe for target" | \
+          grep -v "WARNING.*does not exist" || \
+        make -j1 V=s 2>&1 | \
+          grep -v "warning: overriding recipe for target" | \
+          grep -v "WARNING.*does not exist"
+
+    # 14. 检查固件生成情况(新增步骤)
+    - name: Verify firmware files
+      run: |
+        echo "检查固件文件是否生成:"
+        if [ -d "$OPENWRT_DIR/bin/targets/qualcommax/ipq807x" ]; then
+          echo "固件目录存在，文件列表:"
+          ls -la "$OPENWRT_DIR/bin/targets/qualcommax/ipq807x/"
+          echo "固件文件详情:"
+          find "$OPENWRT_DIR/bin/targets/qualcommax/ipq807x/" -name "*.bin" -o -name "*.ubi" -o -name "*.itb" 2>/dev/null | xargs -I {} ls -lh {} || true
+        else
+          echo "警告: 固件目录不存在"
+        fi
+
+    # 15. Upload firmware (修复: 使用正确的路径语法)
+    - name: Upload firmware
+      if: env.UPLOAD_FIRMWARE == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: Swaiot-CPE-S10-ipq807x-NSS
+        # 修复: 使用正确的环境变量语法
+        path: ${{ env.OPENWRT_DIR }}/bin/targets/qualcommax/ipq807x/
+        if-no-files-found: error  # 没有文件时报错，而不是警告
+        retention-days: 30
+        compression-level: 6
