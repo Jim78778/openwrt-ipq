@@ -164,13 +164,36 @@ ln -snf "$DL_DIR/nss-packages" "$DIYPATH/nss-packages"
 echo "==> DIYPATH created: $DIYPATH/nss-packages -> $DL_DIR/nss-packages"
 
 ###############################################################################
-echo "==> [5/7] MHI补丁"
+echo "==> [5/7] qmodem / MHI 依赖修复（安全版）"
 ###############################################################################
 
-sed -i \
-  's/+kmod-mhi-wwan +quectel-CM-5G +quectel-cm/+kmod-mhi-bus +kmod-mhi-net +kmod-mhi-wwan-ctrl +uqmi/' \
-  package/feeds/qmodem/qmodem/Makefile
+QMODEM_MK="package/feeds/qmodem/qmodem/Makefile"
+QMODEM_MK_DIY="package/diypath/qmodem/qmodem/Makefile"
 
+if [ -f "$QMODEM_MK" ]; then
+    echo "✅ 在 feeds 中发现 qmodem，应用补丁"
+    sed -i \
+      's/+kmod-mhi-wwan/+kmod-mhi-bus +kmod-mhi-net +kmod-mhi-wwan-ctrl/g' \
+      "$QMODEM_MK"
+
+    sed -i \
+      's/+quectel-CM-5G//g; s/+quectel-cm//g' \
+      "$QMODEM_MK"
+
+elif [ -f "$QMODEM_MK_DIY" ]; then
+    echo "✅ 在 diypath 中发现 qmodem，应用补丁"
+    sed -i \
+      's/+kmod-mhi-wwan/+kmod-mhi-bus +kmod-mhi-net +kmod-mhi-wwan-ctrl/g' \
+      "$QMODEM_MK_DIY"
+
+    sed -i \
+      's/+quectel-CM-5G//g; s/+quectel-cm//g' \
+      "$QMODEM_MK_DIY"
+
+else
+    echo "⚠️ qmodem 尚未安装（feeds install 之前），跳过补丁"
+    echo "ℹ️ 该补丁会在 feeds install 后生效"
+fi
 
 ###############################################################################
 echo "==> [6/7] 配置验证和总结"
