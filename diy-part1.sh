@@ -164,11 +164,13 @@ ln -snf "$DL_DIR/nss-packages" "$DIYPATH/nss-packages"
 echo "==> DIYPATH created: $DIYPATH/nss-packages -> $DL_DIR/nss-packages"
 
 ###############################################################################
-echo "==> [5/7] Optional clean"
+echo "==> [5/7] MHI补丁"
 ###############################################################################
 
-# 如果需要清理 NSS 包缓存，取消注释
-# make -C "$OPENWRT_DIR" package/nss_packages/clean
+sed -i \
+  's/+kmod-mhi-wwan +quectel-CM-5G +quectel-cm/+kmod-mhi-bus +kmod-mhi-net +kmod-mhi-wwan-ctrl +uqmi/' \
+  package/feeds/qmodem/qmodem/Makefile
+
 
 ###############################################################################
 echo "==> [6/7] 配置验证和总结"
