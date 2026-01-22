@@ -22,7 +22,7 @@
 
 	chosen {
 		stdout-path = "serial0:115200n8";
-		bootargs-append = " root=/dev/ubiblock0_1 swiotlb=1 coherent_pool=2M";
+		bootargs-append = " swiotlb=1 coherent_pool=2M";
 	};
 
 	memory@40000000 {
@@ -145,7 +145,7 @@
 
 			/* 0. rootfs - 250MB */
 			partition@0 {
-				label = "rootfs";
+				label = "ubi";
 				reg = <0x00000000 0x0fa00000>;
 			};
 
