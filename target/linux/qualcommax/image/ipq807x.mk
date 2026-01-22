@@ -6,15 +6,15 @@ define Device/swaiot_cpe_s10
   DEVICE_MODEL := CPE-S10
   DEVICE_VARIANT := NAND
 
-  SOC := ipq8071
-  DEVICE_DTS := ipq8071-s10
+  SOC := ipq807x
+  DEVICE_DTS := ipq8074-s10
 
   BLOCKSIZE := 128k
   PAGESIZE := 2048
 
   IMAGES := factory.bin sysupgrade.bin
 
-  IMAGE/factory.bin := append-ubi | qsdk-ipq-factory-nand
+  IMAGE/factory.bin := qsdk-ipq-factory-nand
   IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
 
   DEVICE_PACKAGES := \
@@ -23,12 +23,14 @@ define Device/swaiot_cpe_s10
         kmod-mhi-net \
         kmod-mhi-wwan-ctrl \
         kmod-mhi-wwan-mbim \
-        qmodem \
         luci-proto-qmi \
         uqmi \
         kmod-usb-net-rndis \
         kmod-usb-net-cdc-ether
 endef
+
+TARGET_DEVICES += swaiot_cpe_s10
+
 
 TARGET_DEVICES += swaiot_cpe_s10
 
