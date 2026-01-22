@@ -55,7 +55,7 @@ jobs:
           uglifyjs upx-ucl unzip vim wget xxd zlib1g-dev bc file time \
           xz-utils zstd liblzma-dev libzstd-dev libstdc++-12-dev libcap-dev \
           libnl-3-dev libnl-genl-3-dev \
-          groff groff-base groff-doc
+          groff groff-base
 
         # NSS / OpenWrt Python host deps
         pip3 install pysocks unidecode
