@@ -101,6 +101,27 @@ else
     echo "⚠️  ci.config 不存在，跳过配置合并"
 fi
 
+
+###############################################################################
+echo "==> Fix known fake / broken dependencies"
+###############################################################################
+
+# 1. mac80211 不要 NSS
+sed -i \
+  -e '/kmod-qca-nss-drv/d' \
+  -e '/wifi-meshmgr/d' \
+  package/kernel/mac80211/Makefile || true
+
+# 2. 不用 ECM，直接删
+rm -rf package/feeds/nss_packages/qca-nss-ecm || true
+
+# 3. 修 QModem 依赖
+sed -i \
+  -e 's/quectel-CM-5G/quectel-cm/g' \
+  -e '/kmod-mhi-wwan/d' \
+  package/feeds/qmodem/qmodem/Makefile || true
+
+
 ###############################################################################
 echo "==> [2/7] Preload NSS Packages source"
 ###############################################################################
