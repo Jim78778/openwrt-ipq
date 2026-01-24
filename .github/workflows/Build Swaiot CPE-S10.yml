@@ -87,26 +87,30 @@ jobs:
     # 8.5 Pin qca-nss-ecm to known-good commit 30fbfa4
     - name: Pin qca-nss-ecm to 30fbfa4
       run: |
-        cd "$OPENWRT_DIR"
+       cd "$OPENWRT_DIR"
+       FEED_DIR="feeds/nss_packages"
 
-        ECM_DIR="feeds/nss_packages/qca-nss-ecm"
+       if [ ! -d "$FEED_DIR/.git" ]; then
+       echo "❌ nss_packages feed is not a git repo"
+       exit 1
+       fi
 
-        if [ ! -d "$ECM_DIR/.git" ]; then
-          echo "❌ qca-nss-ecm not found or not a git repo"
-          exit 1
-        fi
+       cd "$FEED_DIR"
 
-        cd "$ECM_DIR"
+       echo "Current nss_packages commit:"
+       git rev-parse --short HEAD
 
-        echo "Current qca-nss-ecm commit:"
-        git rev-parse --short HEAD
+       echo "Pinning qca-nss-ecm to commit 30fbfa4 ..."
 
-        echo "Pinning qca-nss-ecm to 30fbfa4 ..."
-        git fetch origin
-        git checkout 30fbfa4
+       # 确保能拿到历史 commit（GitHub Actions 常见坑）
+       git fetch --unshallow || true
+       git fetch origin
 
-        echo "Pinned qca-nss-ecm commit:"
-        git rev-parse --short HEAD
+       # 只 checkout 到包含 30fbfa4 的状态
+       git checkout 30fbfa4
+
+       echo "Pinned nss_packages commit:"
+       git rev-parse --short HEAD
 
     # 9. Apply diy-part1.sh
     - name: Apply diy-part1.sh
