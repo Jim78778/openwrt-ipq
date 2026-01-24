@@ -81,7 +81,7 @@ jobs:
     - name: Update & install feeds
       run: |
         cd "$OPENWRT_DIR"
-        ./scripts/feeds update base packages luci routing telephony nss_packages sqm_scripts_nss qmodem
+        ./scripts/feeds update -a
         ./scripts/feeds install -a
 
     # 9. Apply diy-part1.sh
