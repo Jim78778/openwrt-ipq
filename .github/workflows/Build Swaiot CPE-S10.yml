@@ -84,33 +84,33 @@ jobs:
         ./scripts/feeds update base packages luci routing telephony nss_packages sqm_scripts_nss qmodem
         ./scripts/feeds install -a
     
-    # 8.5 Pin qca-nss-ecm to known-good commit 30fbfa4
-    - name: Pin qca-nss-ecm to 30fbfa4
+    # 8.5 Pin qca-nss-ecm to known-good commit 30fbfa4 (方案 A)
+    - name: Pin qca-nss-ecm to 30fbfa4 (package override)
       run: |
-       cd "$OPENWRT_DIR"
-       FEED_DIR="feeds/nss_packages"
+        set -e
+        cd "$OPENWRT_DIR"
 
-       if [ ! -d "$FEED_DIR/.git" ]; then
-       echo "❌ nss_packages feed is not a git repo"
-       exit 1
-       fi
+        echo "==> Remove feed version of qca-nss-ecm"
+        rm -rf feeds/nss_packages/qca-nss-ecm
 
-       cd "$FEED_DIR"
+        echo "==> Clone upstream qca-nss-ecm"
+        mkdir -p package
+        cd package
 
-       echo "Current nss_packages commit:"
-       git rev-parse --short HEAD
+        git clone https://git.codelinaro.org/clo/qsdk/oss/lklm/qca-nss-ecm.git
+        cd qca-nss-ecm
 
-       echo "Pinning qca-nss-ecm to commit 30fbfa4 ..."
+        echo "==> Fetch full history"
+        git fetch --tags
+        git fetch --unshallow || true
 
-       # 确保能拿到历史 commit（GitHub Actions 常见坑）
-       git fetch --unshallow || true
-       git fetch origin
+        echo "==> Checkout known-good commit 30fbfa4"
+        git checkout 30fbfa4
 
-       # 只 checkout 到包含 30fbfa4 的状态
-       git checkout 30fbfa4
+        echo "==> Final qca-nss-ecm commit:"
+        git rev-parse --short HEAD
 
-       echo "Pinned nss_packages commit:"
-       git rev-parse --short HEAD
+        echo "==> qca-nss-ecm pinned successfully"
 
     # 9. Apply diy-part1.sh
     - name: Apply diy-part1.sh
