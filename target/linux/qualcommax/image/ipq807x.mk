@@ -33,6 +33,36 @@ define Build/wax6xx-netgear-tar
 	rm -rf $@.tmp
 endef
 
+define Device/swaiot_cpe_s10
+  $(call Device/Default)
+
+  DEVICE_VENDOR := Swaiot
+  DEVICE_MODEL := CPE-S10
+  DEVICE_VARIANT := NAND
+
+  SOC := ipq8074
+  DEVICE_DTS := ipq8074-s10
+
+  # NAND 参数
+  BLOCKSIZE := 128k
+  PAGESIZE := 2048
+
+  # 普通 kernel（不生成 FIT）
+  KERNEL = kernel-bin | lzma
+  KERNEL_NAME := Image
+  DEVICE_KERNEL_LOADADDR := 0x41000000
+  DEVICE_KERNEL_ENTRY := 0x41000000
+
+  # UBI / sysupgrade
+  KERNEL_IN_UBI := 1
+  IMAGE_SIZE := 110592k
+  KERNEL_SIZE := 16384k
+
+  IMAGE/sysupgrade.bin := sysupgrade-ubi | append-metadata
+endef
+
+TARGET_DEVICES += swaiot_cpe_s10
+
 define Build/zyxel-nwa210ax-fit
 	$(TOPDIR)/scripts/mkits-zyxel-fit-filogic.sh \
 		$@.its $@ "5c e1 ff ff ff ff ff ff ff ff"
