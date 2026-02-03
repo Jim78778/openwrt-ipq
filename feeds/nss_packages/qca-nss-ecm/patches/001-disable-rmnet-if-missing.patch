@@ -1,0 +1,9 @@
+--- a/frontends/nss/ecm_nss_rmnet.c
++++ b/frontends/nss/ecm_nss_rmnet.c
+@@ -1,3 +1,10 @@
++#ifndef CONFIG_NSS_RMNET
++static inline int nss_rmnet_rx_get_ifnum(struct net_device *dev)
++{
++    return -1;
++}
++#endif
