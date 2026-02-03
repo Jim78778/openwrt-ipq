@@ -1,0 +1,11 @@
+--- a/qfirehose.c
++++ b/qfirehose.c
+@@ -412,7 +412,8 @@ int main(int argc, char **argv)
+         case 'l':
+             if (optarg) {
+-                snprintf(filename, sizeof(filename), "%.80s/qfirehose_%lu.log", optarg, time(NULL));
++                snprintf(filename, sizeof(filename),
++                         "%.80s/qfirehose_%lld.log", optarg, (long long)time(NULL));
+                 log_fd = fopen(filename, "w+");
+             }
+             break;
