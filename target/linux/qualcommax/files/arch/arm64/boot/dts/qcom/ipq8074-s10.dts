@@ -1,0 +1,119 @@
+/dts-v1/;
+
+#include "ipq8074.dtsi"
+
+/ {
+    model = "S10 IPQ8071 Router";
+    compatible = "s10,ipq8071", "qcom,ipq8074";
+
+    aliases {
+        serial0 = &blsp1_uart3;
+    };
+
+    chosen {
+        stdout-path = "serial0:115200n8";
+    };
+
+    memory@40000000 {
+        device_type = "memory";
+        reg = <0x0 0x40000000 0x0 0x40000000>;
+    };
+};
+
+/* ================= NAND & ART ================= */
+
+&nand {
+    status = "okay";
+
+    nand@0 {
+        reg = <0>;
+        nand-ecc-strength = <4>;
+        nand-ecc-step-size = <512>;
+
+        partitions {
+            compatible = "fixed-partitions";
+            #address-cells = <1>;
+            #size-cells = <1>;
+
+            partition@0 {
+                label = "0:sbl1";
+                reg = <0x00000000 0x00100000>;
+                read-only;
+            };
+
+            partition@100000 {
+                label = "0:mibib";
+                reg = <0x00100000 0x00100000>;
+                read-only;
+            };
+
+            partition@200000 {
+                label = "0:ubi";
+                reg = <0x00200000 0x0fd00000>;
+            };
+
+            /* ===== ART / NVMEM ===== */
+
+            precal_art_1000: precal@1000 {
+                label = "precal";
+                reg = <0x0fd00000 0x00010000>;
+                read-only;
+            };
+
+            macaddr_art_1002: macaddr@1002 {
+                label = "macaddr";
+                reg = <0x0fd10000 0x00010000>;
+                read-only;
+            };
+
+            macaddr_art_1008: macaddr@1008 {
+                label = "macaddr2";
+                reg = <0x0fd20000 0x00010000>;
+                read-only;
+            };
+        };
+    };
+};
+
+/* ================= NVMEM 引用（不再定义 label） ================= */
+
+&soc {
+    nvmem-cells {
+        compatible = "nvmem-cells";
+
+        precal@1000 {
+            reg = <0x1000 0x1000>;
+            nvmem-cell-parent = <&precal_art_1000>;
+        };
+
+        macaddr@1002 {
+            reg = <0x1002 0x6>;
+            nvmem-cell-parent = <&macaddr_art_1002>;
+        };
+
+        macaddr@1008 {
+            reg = <0x1008 0x6>;
+            nvmem-cell-parent = <&macaddr_art_1008>;
+        };
+    };
+};
+
+/* ================= Ethernet ================= */
+
+&gmac0 {
+    status = "okay";
+    nvmem-cells = <&macaddr_art_1002>;
+    nvmem-cell-names = "mac-address";
+};
+
+&gmac1 {
+    status = "okay";
+    nvmem-cells = <&macaddr_art_1008>;
+    nvmem-cell-names = "mac-address";
+};
+
+/* ================= UART ================= */
+
+&blsp1_uart3 {
+    status = "okay";
+};
