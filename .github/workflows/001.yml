@@ -1,41 +1,69 @@
-name:  Swaiot CPE-S10 (ipq807x NSS)
+name: Build Swaiot CPE-S10 (ipq807x NSS)
 
 on:
   workflow_dispatch:
   push:
     branches:
       - swaiot-s10
+    paths:
+      - 'ci.config'
+      - 'diy-part1.sh'
+      - '.github/workflows/**'
 
 env:
   TZ: Asia/Shanghai
   REPO_URL: https://github.com/Jim78778/openwrt-ipq.git
   REPO_BRANCH: swaiot-s10
   CONFIG_FILE: ci.config
+  DIY_SCRIPT: diy-part1.sh
+  OPENWRT_DIR: /mnt/openwrt
   UPLOAD_FIRMWARE: true
-  OPENWRT_DIR: /mnt/openwrt-build
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
 
     steps:
+    # ------------------------------------------------------------
     # 1. Checkout workflow repo
+    # ------------------------------------------------------------
     - name: Checkout workflow repo
       uses: actions/checkout@v4
 
+    # ------------------------------------------------------------
     # 2. Set timezone
+    # ------------------------------------------------------------
     - name: Set timezone
       run: sudo timedatectl set-timezone "$TZ"
 
-    # 3. Free disk space
+    # ------------------------------------------------------------
+    # 3. Aggressive disk cleanup (SAFE MODE)
+    # ------------------------------------------------------------
     - name: Free disk space
       run: |
-        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
-        sudo apt-get clean
+        echo "=== Disk before cleanup ==="
         df -h
-
-    # 4. Install build dependencies
-    - name: Install build dependencies
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /usr/local/go
+        sudo rm -rf /usr/share/swift
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /opt/hostedtoolcache
+        sudo rm -rf /usr/local/lib/node_modules
+        sudo rm -rf /usr/local/aws-cli
+        sudo rm -rf /usr/local/aws-sam-cli
+        sudo docker image prune -af || true
+        sudo apt-get clean
+        sudo apt-get autoremove -y
+        sudo rm -rf /tmp/*
+        sudo rm -rf /var/tmp/*
+        echo "=== Disk after cleanup ==="
+        df -h
+    # ------------------------------------------------------------
+    # 4. Install OpenWrt build dependencies
+    # ------------------------------------------------------------
+    - name: Install dependencies
       run: |
         sudo apt update
         sudo apt install -y \
@@ -53,181 +81,91 @@ jobs:
           uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev bc file time \
           xz-utils zstd liblzma-dev libzstd-dev libstdc++-12-dev libcap-dev \
           libnl-3-dev libnl-genl-3-dev
-
-        # 安装 NSS 缺失的主机依赖
+        # feeds 中 python 工具的 host 依赖（不影响 target）
         pip3 install pysocks unidecode
-
-    # 5. Prepare /mnt build directory
-    - name: Prepare /mnt build directory
+    # ------------------------------------------------------------
+    # 5. Prepare /mnt build dir
+    # ------------------------------------------------------------
+    - name: Prepare build directory
       run: |
         sudo mkdir -p "$OPENWRT_DIR"
         sudo chown $USER:$USER "$OPENWRT_DIR"
         df -h /mnt
-
-    # 6. Clone openwrt-ipq source
-    - name: Clone openwrt-ipq
+    # ------------------------------------------------------------
+    # 6. Clone OpenWrt source
+    # ------------------------------------------------------------
+    - name: Clone OpenWrt source
       run: |
         git clone --depth=1 -b "$REPO_BRANCH" "$REPO_URL" "$OPENWRT_DIR"
-
-    # 7. Copy ci.config and diy script
-    - name: Copy configs and DIY script
-      run: |
-        # 首先复制 ci.config 作为基础配置
-        cp "${{ github.workspace }}/$CONFIG_FILE" "$OPENWRT_DIR/.config"
-        # 然后复制 diy 脚本
-        cp "${{ github.workspace }}/$DIY_SCRIPT" "$OPENWRT_DIR/"
-        chmod +x "$OPENWRT_DIR/$DIY_SCRIPT"
-
-    # 8. Update & install feeds
-    - name: Update & install feeds
+        df -h
+    # ------------------------------------------------------------
+    # 7. Fix feeds.conf.default (REMOVE video feed)
+    # ------------------------------------------------------------
+    - name: Fix feeds
       run: |
         cd "$OPENWRT_DIR"
-        ./scripts/feeds update -a
+        sed -i '/^src-git video/d' feeds.conf.default
+        cat feeds.conf.default
+    # ------------------------------------------------------------
+    # 8. Copy config & DIY script
+    # ------------------------------------------------------------
+    - name: Copy config and DIY script
+      run: |
+        cp "${{ github.workspace }}/$CONFIG_FILE" "$OPENWRT_DIR/.config"
+        cp "${{ github.workspace }}/$DIY_SCRIPT" "$OPENWRT_DIR/"
+        chmod +x "$OPENWRT_DIR/$DIY_SCRIPT"
+    # ------------------------------------------------------------
+    # 9. Update & install feeds (NO video)
+    # ------------------------------------------------------------
+    - name: Update feeds
+      run: |
+        cd "$OPENWRT_DIR"
+        ./scripts/feeds update base packages luci routing telephony nss_packages sqm_scripts_nss
         ./scripts/feeds install -a
-        ./scripts/feeds install -a -p qmodem
-
-    # 9. Apply diy-part1.sh (执行自定义配置合并和NSS处理)
+    # ------------------------------------------------------------
+    # 10. Apply DIY script
+    # ------------------------------------------------------------
     - name: Apply diy-part1.sh
       run: |
         cd "$OPENWRT_DIR"
-        chmod +x "$DIY_SCRIPT"
-        echo "执行 DIY 脚本进行配置合并和NSS处理..."
         ./$DIY_SCRIPT
-
-    # 10. Load config (使用 make defconfig 标准化配置)
+    # ------------------------------------------------------------
+    # 11. Defconfig + sanity check
+    # ------------------------------------------------------------
     - name: Load config
       run: |
         cd "$OPENWRT_DIR"
-        echo "生成最终标准化配置..."
-        # 先备份 DIY 处理后的配置
-        cp .config .config.diy-backup
-        
-        # 执行 defconfig 来标准化配置
-        if ! make defconfig 2>&1; then
-          echo "❌ make defconfig 失败，检查错误日志"
-          # 显示最后50行错误
-          echo "最后50行输出:"
-          tail -50 .config.log 2>/dev/null || echo "无日志文件"
-          exit 1
-        fi
-        
-        echo "✅ 配置标准化完成"
-        
-        # 显示配置变化摘要
-        echo ""
-        echo "配置变化摘要:"
-        echo "---------------"
-        if [ -f .config.diy-backup ]; then
-          diff -u .config.diy-backup .config | grep -E "^[+-]" | grep -v "^---" | grep -v "^+++" | head -10 || true
-        fi
-
-    # 11. Debug NSS config
-    - name: Debug NSS config
-      run: |
-        cd "$OPENWRT_DIR"
-        echo "===== 最终 NSS 配置状态 ====="
-        grep -E "CONFIG_PACKAGE.*(NSS|nss)" .config | head -20 || echo "未找到 NSS 配置"
-        
-        echo ""
-        echo "===== 关键配置检查 ====="
-        echo "目标架构: $(grep '^CONFIG_TARGET_' .config | head -1)"
-        echo "内核版本: $(grep '^CONFIG_LINUX_' .config | head -1)"
-        echo "启用的包数量: $(grep -c '^CONFIG_PACKAGE.*=y' .config)"
-
-    # 12. Download all sources
+        make defconfig
+        grep -q "CONFIG_TARGET_qualcommax_ipq807x_DEVICE_swaiot_cpe_s10=y" .config
+    # ------------------------------------------------------------
+    # 12. Download sources (retry)
+    # ------------------------------------------------------------
     - name: Download packages
       run: |
         cd "$OPENWRT_DIR"
-        make download -j1 V=s
-
-    # 13. Build firmware (安全版本，不使用危险的管道)
+        make download -j1 || make download -j1
+    # ------------------------------------------------------------
+    # 13. Build firmware
+    # ------------------------------------------------------------
     - name: Build firmware
       run: |
         cd "$OPENWRT_DIR"
-        
-        echo "开始构建固件..."
-        
-        # 方法1: 直接构建，记录日志
-        build_log="$OPENWRT_DIR/build.log"
-        
-        # 使用函数处理构建过程
-        build_with_fallback() {
-          local max_jobs=$(nproc)
-          
-          echo "尝试使用 $max_jobs 个并行任务构建..."
-          
-          # 尝试并行构建，将输出同时显示和保存到文件
-          if make -j$max_jobs V=s 2>&1 | tee "$build_log"; then
-            echo "✅ 并行构建成功"
-            return 0
-          else
-            # 检查是否只是警告，而不是真正的错误
-            if tail -10 "$build_log" | grep -q "Error"; then
-              echo "❌ 检测到真正的构建错误"
-              return 1
-            fi
-            
-            echo "⚠️ 并行构建遇到问题，尝试单线程构建..."
-            if make -j1 V=s 2>&1 | tee -a "$build_log"; then
-              echo "✅ 单线程构建成功"
-              return 0
-            else
-              echo "❌ 单线程构建也失败"
-              return 1
-            fi
-          fi
-        }
-        
-        # 执行构建
-        if build_with_fallback; then
-          echo "✅ 固件构建完成"
-        else
-          echo "❌ 固件构建失败"
-          echo ""
-          echo "最后100行构建日志:"
-          tail -100 "$build_log" || true
-          exit 1
-        fi
-
-    # 14. Verify firmware files
+        make -j2 V=s
+    # ------------------------------------------------------------
+    # 14. Verify firmware
+    # ------------------------------------------------------------
     - name: Verify firmware files
       run: |
-        firmware_dir="$OPENWRT_DIR/bin/targets/qualcommax/ipq807x"
-        
-        if [ ! -d "$firmware_dir" ]; then
-          echo "❌ 固件目录不存在: $firmware_dir"
-          exit 1
-        fi
-        
-        echo "✅ 固件目录存在"
-        echo "文件列表:"
-        ls -la "$firmware_dir/"
-        
-        # 检查关键文件
-        swaiot_files=$(find "$firmware_dir" -name "*swaiot_cpe_s10*" | wc -l)
-        if [ "$swaiot_files" -eq 0 ]; then
-          echo "❌ 未找到针对 Swaiot CPE-S10 的固件"
-          exit 1
-        fi
-        
-        echo "✅ 找到 $swaiot_files 个 Swaiot CPE-S10 固件"
-        
-        # 列出具体的固件文件
-        echo "生成的固件:"
-        find "$firmware_dir" -name "*swaiot_cpe_s10*" -o -name "*.bin" -o -name "*.ubi" -o -name "*.itb" 2>/dev/null | \
-          while read file; do
-            size=$(du -h "$file" | cut -f1)
-            echo "  - $(basename "$file") ($size)"
-          done
-
-    # 15. Upload firmware (修复路径问题)
+        cd "$OPENWRT_DIR"
+        ls -lh bin/targets/qualcommax/ipq807x/
+        find bin/targets/qualcommax/ipq807x -name "*.bin" -o -name "*.ubi" -o -name "*.itb"
+    # ------------------------------------------------------------
+    # 15. Upload firmware
+    # ------------------------------------------------------------
     - name: Upload firmware
       if: env.UPLOAD_FIRMWARE == 'true'
       uses: actions/upload-artifact@v4
       with:
         name: Swaiot-CPE-S10-ipq807x-NSS
-        # 使用正确的环境变量语法
         path: ${{ env.OPENWRT_DIR }}/bin/targets/qualcommax/ipq807x/
-        if-no-files-found: error
         retention-days: 30
-        compression-level: 6
