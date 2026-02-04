@@ -147,7 +147,7 @@
 };
 
 /* ================= WiFi ================= */
-&wifi0 {
+&wifi_pci0 {
 	status = "okay";
 	qcom,ath11k-calibration-variant = "cpe-s10-sky";
 	qcom,board_id = <0x92>;
@@ -155,13 +155,14 @@
 	nvmem-cell-names = "pre-calibration", "mac-address";
 };
 
-&wifi1 {
+&wifi_pci1 {
 	status = "okay";
 	qcom,ath11k-calibration-variant = "cpe-s10-sky";
 	qcom,board_id = <0x292>;
 	nvmem-cells = <&precal_art>, <&macaddr_art 4>;
 	nvmem-cell-names = "pre-calibration", "mac-address";
 };
+
 
 /* ================= Ethernet ================= */
 &dp5 {
