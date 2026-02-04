@@ -1,0 +1,36 @@
+Index: qca-nss-ecm/frontends/nss/ecm_nss_common.h
+===================================================================
+--- qca-nss-ecm.orig/frontends/nss/ecm_nss_common.h
++++ qca-nss-ecm/frontends/nss/ecm_nss_common.h
+@@ -30,6 +30,11 @@
+ #include <linux/rtnetlink.h>
+ #include <net/addrconf.h>
+ 
++/* Dummy declaration for missing function */
++#ifndef nss_rmnet_rx_get_ifnum
++int nss_rmnet_rx_get_ifnum(struct net_device *dev);
++#endif
++
+ /*
+  * Debug output levels
+  * 0 = OFF
+Index: qca-nss-ecm/frontends/nss/ecm_nss_common.c
+===================================================================
+--- qca-nss-ecm.orig/frontends/nss/ecm_nss_common.c
++++ qca-nss-ecm/frontends/nss/ecm_nss_common.c
+@@ -50,6 +50,15 @@
+ #include <linux/inetdevice.h>
+ #include <linux/module.h>
+ 
++/* Dummy implementation for missing function */
++#ifndef nss_rmnet_rx_get_ifnum
++int nss_rmnet_rx_get_ifnum(struct net_device *dev)
++{
++	return -ENOSYS;
++}
++EXPORT_SYMBOL(nss_rmnet_rx_get_ifnum);
++#endif
++
+ /*
+  * Debug output levels
+  * 0 = OFF
