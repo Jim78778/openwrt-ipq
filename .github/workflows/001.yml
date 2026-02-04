@@ -8,8 +8,8 @@ on:
 
 env:
   TZ: Asia/Shanghai
-  REPO_URL: https://github.com/Jim78778/immortalwrt.git
-  REPO_BRANCH: main
+  REPO_URL: https://github.com/Jim78778/openwrt-ipq.git
+  REPO_BRANCH: swaiot-s10
   CONFIG_FILE: .config
   UPLOAD_FIRMWARE: true
   OPENWRT_DIR: /mnt/openwrt-build
