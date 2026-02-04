@@ -85,6 +85,7 @@ jobs:
         cd "$OPENWRT_DIR"
         ./scripts/feeds update -a
         ./scripts/feeds install -a
+        ./scripts/feeds install -a -p qmodem
 
     # 9. Apply diy-part1.sh (执行自定义配置合并和NSS处理)
     - name: Apply diy-part1.sh
