@@ -10,7 +10,7 @@ env:
   TZ: Asia/Shanghai
   REPO_URL: https://github.com/Jim78778/openwrt-ipq.git
   REPO_BRANCH: swaiot-s10
-  CONFIG_FILE: .config
+  CONFIG_FILE: ci.config
   UPLOAD_FIRMWARE: true
   OPENWRT_DIR: /mnt/openwrt-build
 
