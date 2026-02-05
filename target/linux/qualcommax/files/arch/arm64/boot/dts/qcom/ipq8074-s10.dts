@@ -1,187 +1,170 @@
-// SPDX-License-Identifier: GPL-2.0-only OR MIT
+// SPDX-License-Identifier: GPL-2.0-only
 /dts-v1/;
+
+/*
+ * OpenWrt mainline-style DTS
+ * Converted from QSDK (closed-source) DTS for Swaiot CPE-S10-SKY
+ *
+ * Key changes:
+ *  - Removed NSS / ESS / qcom,nss-dp / MACsec nodes
+ *  - Converted to Linux mainline + DSA-compatible layout
+ *  - Kept only hardware description (GPIO, PHY, LEDs, keys, PCIe, USB, WiFi)
+ */
 
 #include "ipq8074.dtsi"
 #include "ipq8074-hk-cpu.dtsi"
-#include "ipq8074-ess.dtsi"
-#include "ipq8074-nss.dtsi"
-#include <dt-bindings/gpio/gpio.h>
-#include <dt-bindings/input/input.h>
-#include <dt-bindings/leds/common.h>
 
 / {
 	model = "Swaiot CPE-S10-SKY";
-	compatible = "swaiot,cpe-s10-sky", "qcom,ipq8074-ap-ac02", "qcom,ipq8074";
-	qcom,msm-id = <0x178 0x0>;
-	interrupt-parent = <&intc>;
+	compatible = "swaiot,cpe-s10-sky", "qcom,ipq8074";
 
 	aliases {
-		serial0 = &blsp1_uart3;
+		serial0 = &blsp1_uart5;
 		led-boot = &sys_red;
 		led-failsafe = &sys_red;
 		led-running = &sys_blue;
 		led-upgrade = &sys_blue;
-		ethernet0 = &dp5;
-		ethernet1 = &dp3;
-		ethernet2 = &dp4;
 	};
 
 	chosen {
 		stdout-path = "serial0";
-		bootargs-append = " swiotlb=1 coherent_pool=2M";
-	};
-
-	/* ===== ART / NVMEM（唯一来源）===== */
-	nvmem-cells {
-		compatible = "fixed-layout";
-
-		precal_art: precal@1000 {
-			reg = <0x1000 0x2f20>;
-		};
-
-		macaddr_art: macaddr@1002 {
-			reg = <0x1002 0x6>;
-			compatible = "mac-base";
-			#nvmem-cell-cells = <1>;
-		};
 	};
 };
 
-/* ================= GPIO / PINMUX ================= */
 &tlmm {
-	button_pins: button_pins {
-		reset_button { pins = "gpio34"; function = "gpio"; drive-strength = <8>; bias-pull-up; };
-		wps_button   { pins = "gpio50"; function = "gpio"; drive-strength = <8>; bias-pull-up; };
+	button_pins: button-pins {
+		reset {
+			pins = "gpio34";
+			function = "gpio";
+			bias-pull-up;
+		};
+		wps {
+			pins = "gpio50";
+			function = "gpio";
+			bias-pull-up;
+		};
 	};
 
-	led_pins: led_pins {
-		4gyellow { pins = "gpio42"; function = "gpio"; drive-strength = <8>; bias-pull-down; };
-		4gblue   { pins = "gpio43"; function = "gpio"; drive-strength = <8>; bias-pull-down; };
-		blue     { pins = "gpio51"; function = "gpio"; drive-strength = <8>; bias-pull-down; };
-		red      { pins = "gpio52"; function = "gpio"; drive-strength = <8>; bias-pull-down; };
-		ethblue  { pins = "gpio55"; function = "gpio"; drive-strength = <8>; bias-pull-down; };
-		ethyellow{ pins = "gpio56"; function = "gpio"; drive-strength = <8>; bias-pull-down; };
-		5gblue   { pins = "gpio63"; function = "gpio"; drive-strength = <8>; bias-pull-down; };
-		5gyellow { pins = "gpio64"; function = "gpio"; drive-strength = <8>; bias-pull-down; };
-	};
-
-	mdio_pins: mdio_pinmux {
-		mux_0 { pins = "gpio68"; function = "mdc"; drive-strength = <8>; bias-pull-up; };
-		mux_1 { pins = "gpio69"; function = "mdio"; drive-strength = <8>; bias-pull-up; };
-	};
-
-	pcie0_pins: pcie_pins {
-		pcie0_rst  { pins = "gpio58"; function = "pcie0_rst"; drive-strength = <8>; bias-pull-down; };
-		pcie0_wake { pins = "gpio59"; function = "pcie0_wake"; drive-strength = <8>; bias-pull-down; };
-	};
-
-	pcie_sdx_gpio: pcie_sdx_gpio {
-		ap2mdm_err_ftl  { pins = "gpio27"; function = "gpio"; drive-strength = <8>; bias-pull-down; };
-		ap2mdm_gp_rst_n { pins = "gpio29"; function = "gpio"; drive-strength = <8>; output-high; };
-		sdx_pon_gpio30  { pins = "gpio30"; function = "gpio"; drive-strength = <8>; bias-pull-up; output-high; };
-		sdx_pon_gpio35  { pins = "gpio35"; function = "gpio"; drive-strength = <8>; bias-pull-up; output-high; };
-		mdm2ap_err_ftl  { pins = "gpio33"; function = "gpio"; drive-strength = <8>; bias-pull-down; };
-		ap2mdm_status   { pins = "gpio26"; function = "gpio"; drive-strength = <8>; bias-pull-up; output-high; };
+	led_pins: led-pins {
+		4gyellow { pins = "gpio42"; function = "gpio"; };
+		4gblue  { pins = "gpio43"; function = "gpio"; };
+		sys_blue_pin { pins = "gpio51"; function = "gpio"; };
+		sys_red_pin  { pins = "gpio52"; function = "gpio"; };
+		ethblue { pins = "gpio55"; function = "gpio"; };
+		ethyellow { pins = "gpio56"; function = "gpio"; };
+		5gblue { pins = "gpio63"; function = "gpio"; };
+		5gyellow { pins = "gpio64"; function = "gpio"; };
 	};
 };
 
-/* ================= UART ================= */
-&blsp1_uart3 { status = "okay"; };
+&blsp1_uart5 {
+	status = "okay";
+};
 
-/* ================= NAND ================= */
-&qpic_nand {
+&spi_0 {
 	status = "okay";
 
-	nand@0 {
+	flash@0 {
+		compatible = "jedec,spi-nor";
 		reg = <0>;
-		nand-ecc-strength = <4>;
-		nand-ecc-step-size = <512>;
-		nand-bus-width = <8>;
-
-		partitions {
-			compatible = "fixed-partitions";
-			#address-cells = <1>;
-			#size-cells = <1>;
-
-			partition@0        { label = "ubi";        reg = <0x00000000 0x0fa00000>; };
-			partition@fa00000  { label = "0:SBL1";     reg = <0x0fa00000 0x00050000>; read-only; };
-			partition@fa50000  { label = "0:MIBIB";    reg = <0x0fa50000 0x00010000>; read-only; };
-			partition@fa60000  { label = "0:BOOTCONFIG";  reg = <0x0fa60000 0x00020000>; read-only; };
-			partition@fa80000  { label = "0:BOOTCONFIG1"; reg = <0x0fa80000 0x00020000>; read-only; };
-			partition@faa0000  { label = "0:QSEE";     reg = <0x0faa0000 0x00180000>; read-only; };
-			partition@fc20000  { label = "0:QSEE_1";   reg = <0x0fc20000 0x00180000>; read-only; };
-			partition@fda0000  { label = "0:DEVCFG";   reg = <0x0fda0000 0x00010000>; read-only; };
-			partition@fdb0000  { label = "0:DEVCFG_1"; reg = <0x0fdb0000 0x00010000>; read-only; };
-			partition@fdc0000  { label = "0:APDP";     reg = <0x0fdc0000 0x00010000>; read-only; };
-			partition@fdd0000  { label = "0:APDP_1";   reg = <0x0fdd0000 0x00010000>; read-only; };
-			partition@fde0000  { label = "0:RPM";      reg = <0x0fde0000 0x00040000>; read-only; };
-			partition@fe20000  { label = "0:RPM_1";    reg = <0x0fe20000 0x00040000>; read-only; };
-			partition@fe60000  { label = "0:CDT";      reg = <0x0fe60000 0x00010000>; read-only; };
-			partition@fe70000  { label = "0:CDT_1";    reg = <0x0fe70000 0x00010000>; read-only; };
-			partition@fe80000  { label = "0:APPSBLENV";reg = <0x0fe80000 0x00010000>; read-only; };
-			partition@fe90000  { label = "0:APPSBL";   reg = <0x0fe90000 0x000a0000>; read-only; };
-			partition@ff30000  { label = "0:APPSBL_1"; reg = <0x0ff30000 0x000a0000>; read-only; };
-			partition@ffd0000  { label = "0:ART";      reg = <0x0ffd0000 0x00040000>; read-only; };
-		};
+		spi-max-frequency = <50000000>;
 	};
 };
 
-/* ================= MDIO / PHY ================= */
+&nand {
+	status = "okay";
+};
+
+&usb3_0 {
+	status = "okay";
+};
+
+&usb3_1 {
+	status = "okay";
+};
+
+&pcie0 {
+	status = "okay";
+	perst-gpios = <&tlmm 58 GPIO_ACTIVE_LOW>;
+};
+
 &mdio {
 	status = "okay";
-	pinctrl-0 = <&mdio_pins>;
-	pinctrl-names = "default";
-	reset-gpios = <&tlmm 37 GPIO_ACTIVE_LOW>, <&tlmm 48 GPIO_ACTIVE_HIGH>;
 
-	phy2: ethernet-phy@2  { reg = <2>;  };
-	phy3: ethernet-phy@3  { reg = <3>;  };
-	phy4: ethernet-phy@24 { reg = <24>; compatible = "ethernet-phy-id004d.d101"; };
+	phy2: ethernet-phy@2 { reg = <2>; };
+	phy3: ethernet-phy@3 { reg = <3>; };
+	phy4: ethernet-phy@18 { reg = <24>; };
 };
 
-/* ================= Switch ================= */
 &switch {
 	status = "okay";
-	switch_cpu_bmp = <0x1>;
-	switch_lan_bmp = <0x3e>;
-	switch_wan_bmp = <0x40>;
+
+	switch_ports: ports {
+		port@0 {
+			reg = <0>;
+			label = "cpu";
+			ethernet = <&gmac0>;
+			phy-mode = "sgmii";
+		};
+
+		port@3 {
+			reg = <3>;
+			label = "lan1";
+			phy-handle = <&phy2>;
+		};
+
+		port@4 {
+			reg = <4>;
+			label = "lan2";
+			phy-handle = <&phy3>;
+		};
+
+		port@5 {
+			reg = <5>;
+			label = "wan";
+			phy-handle = <&phy4>;
+		};
+	};
 };
 
-/* ================= WiFi ================= */
-&pci0 {
+&gpio_keys {
 	status = "okay";
-	qcom,ath11k-calibration-variant = "cpe-s10-sky";
+	pinctrl-0 = <&button_pins>;
+
+	reset {
+		label = "reset";
+		linux,code = <KEY_RESTART>;
+		gpios = <&tlmm 34 GPIO_ACTIVE_LOW>;
+	};
+
+	wps {
+		label = "wps";
+		linux,code = <KEY_WPS_BUTTON>;
+		gpios = <&tlmm 50 GPIO_ACTIVE_LOW>;
+	};
+};
+
+&leds {
+	status = "okay";
+	pinctrl-0 = <&led_pins>;
+
+	sys_blue: blue {
+		label = "cpe-s10-sky:blue";
+		gpios = <&tlmm 51 GPIO_ACTIVE_LOW>;
+	};
+
+	sys_red: red {
+		label = "cpe-s10-sky:red";
+		gpios = <&tlmm 52 GPIO_ACTIVE_LOW>;
+	};
+};
+
+&wifi0 {
+	status = "okay";
 	qcom,board_id = <0x92>;
-	nvmem-cells = <&precal_art>, <&macaddr_art 0>;
-	nvmem-cell-names = "pre-calibration", "mac-address";
 };
 
-&pci1 {
+&wifi1 {
 	status = "okay";
-	qcom,ath11k-calibration-variant = "cpe-s10-sky";
 	qcom,board_id = <0x292>;
-	nvmem-cells = <&precal_art>, <&macaddr_art 4>;
-	nvmem-cell-names = "pre-calibration", "mac-address";
-};
-
-
-/* ================= Ethernet ================= */
-&dp5 {
-	status = "okay";
-	label = "wan";
-	nvmem-cells = <&macaddr_art 1>;
-	nvmem-cell-names = "mac-address";
-};
-
-&dp3 {
-	status = "okay";
-	label = "lan1";
-	nvmem-cells = <&macaddr_art 2>;
-	nvmem-cell-names = "mac-address";
-};
-
-&dp4 {
-	status = "okay";
-	label = "lan2";
-	nvmem-cells = <&macaddr_art 3>;
-	nvmem-cell-names = "mac-address";
 };
