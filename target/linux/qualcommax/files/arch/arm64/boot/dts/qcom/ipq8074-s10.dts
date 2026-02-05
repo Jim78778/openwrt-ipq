@@ -147,7 +147,7 @@
 };
 
 /* ================= WiFi ================= */
-&wifi_pci0 {
+&pci0 {
 	status = "okay";
 	qcom,ath11k-calibration-variant = "cpe-s10-sky";
 	qcom,board_id = <0x92>;
@@ -155,7 +155,7 @@
 	nvmem-cell-names = "pre-calibration", "mac-address";
 };
 
-&wifi_pci1 {
+&pci1 {
 	status = "okay";
 	qcom,ath11k-calibration-variant = "cpe-s10-sky";
 	qcom,board_id = <0x292>;
