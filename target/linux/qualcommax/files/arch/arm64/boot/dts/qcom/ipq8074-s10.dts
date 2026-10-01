@@ -1,64 +1,102 @@
-// SPDX-License-Identifier: GPL-2.0-only OR MIT
+// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
+/* Swaiot CPE-S10-SKY | LibWrt 6.12.94 V2 DTS */
 /dts-v1/;
-
 #include "ipq8074.dtsi"
 #include "ipq8074-hk-cpu.dtsi"
 #include "ipq8074-ess.dtsi"
 #include "ipq8074-nss.dtsi"
-
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/leds/common.h>
 
 / {
 	model = "Swaiot CPE-S10-SKY";
-	compatible = "swaiot,cpe-s10-sky", "qcom,ipq8074";
-
+	compatible = "swaiot,cpe-s10-sky", "qcom,ipq8074-ap-ac02", "qcom,ipq8074";
 	aliases {
-		serial0 = &blsp1_uart3;
-		ethernet0 = &dp5;
+		serial0 = &blsp1_uart5;
+		ethernet0 = &dp5_syn;
 		ethernet1 = &dp3;
 		ethernet2 = &dp4;
+		led-boot     = &led_top_blue;
+		led-failsafe = &led_top_red;
+		led-running  = &led_top_blue;
+		led-upgrade  = &led_top_red;
+		label-mac-device = &dp5_syn;
 	};
-
 	chosen {
 		stdout-path = "serial0:115200n8";
-		bootargs-append = " swiotlb=1 coherent_pool=2M";
+		bootargs-append = "root=/dev/ubiblock0_1 swiotlb=1 coherent_pool=2M";	
+        };
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0x0 0x40000000 0x0 0x80000000>;
 	};
 
-	dummy_reg: dummy-regulator {
-		compatible = "regulator-fixed";
-		regulator-name = "dummy";
-		regulator-min-microvolt = <0>;
-		regulator-max-microvolt = <0>;
+	keys {
+		compatible = "gpio-keys";
+		pinctrl-0 = <&button_pins>;
+		pinctrl-names = "default";
+		rfkill {
+			label = "rfkill";
+			linux,code = <KEY_RFKILL>;
+			gpios = <&tlmm 25 GPIO_ACTIVE_LOW>;
+			debounce-interval = <60>;
+		};
+		reset {
+			label = "reset";
+			linux,code = <KEY_RESTART>;
+			gpios = <&tlmm 34 GPIO_ACTIVE_LOW>;
+			debounce-interval = <60>;
+		};
+		wps {
+			label = "wps";
+			linux,code = <KEY_WPS_BUTTON>;
+			gpios = <&tlmm 50 GPIO_ACTIVE_LOW>;
+			debounce-interval = <60>;
+		};
 	};
 
 	leds {
 		compatible = "gpio-leds";
 		pinctrl-0 = <&led_pins>;
 		pinctrl-names = "default";
-
-		sys_blue: blue {
-			label = "s10:blue";
-			gpios = <&tlmm 51 GPIO_ACTIVE_LOW>;
+		led_4g_blue:   4g-blue   { label = "blue:4g";     gpios = <&tlmm 43 GPIO_ACTIVE_HIGH>; };
+		led_4g_yellow: 4g-yellow { label = "yellow:4g";   gpios = <&tlmm 42 GPIO_ACTIVE_HIGH>; };
+		led_5g_blue:   5g-blue   { label = "blue:5g";     gpios = <&tlmm 64 GPIO_ACTIVE_HIGH>; };
+		led_5g_yellow: 5g-yellow { label = "yellow:5g";   gpios = <&tlmm 63 GPIO_ACTIVE_HIGH>; };
+		led_top_red:   top-red   { label = "red:top";     gpios = <&tlmm 52 GPIO_ACTIVE_HIGH>; };
+		led_top_blue:  top-blue  {
+			label = "blue:top";
+			gpios = <&tlmm 51 GPIO_ACTIVE_HIGH>;
+			default-state = "on";
 		};
-
-		sys_red: red {
-			label = "s10:red";
-			gpios = <&tlmm 52 GPIO_ACTIVE_LOW>;
-		};
+		led_wifi_blue:   wifi-blue   { label = "blue:wifi";   gpios = <&tlmm 55 GPIO_ACTIVE_HIGH>; };
+		led_wifi_yellow: wifi-yellow { label = "yellow:wifi"; gpios = <&tlmm 56 GPIO_ACTIVE_HIGH>; };
 	};
 };
 
 &tlmm {
-	mdio_pins: mdio_pinmux {
-		mux_0 {
+	button_pins: button-pins {
+		pins = "gpio25", "gpio34", "gpio50";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-pull-up;
+	};
+	led_pins: led-pins {
+		pins = "gpio42", "gpio43", "gpio51", "gpio52",
+		       "gpio55", "gpio56", "gpio63", "gpio64";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-pull-down;
+	};
+	mdio_pins: mdio-pins {
+		mdc {
 			pins = "gpio68";
 			function = "mdc";
 			drive-strength = <8>;
 			bias-pull-up;
 		};
-		mux_1 {
+		mdio {
 			pins = "gpio69";
 			function = "mdio";
 			drive-strength = <8>;
@@ -66,15 +104,42 @@
 		};
 	};
 
-	led_pins: led_pins {
-		blue {
-			pins = "gpio51";
+	/* ====== SDX 5G模组 GPIO 定义 ====== */
+	pcie0_wake_pins: pcie0-wake-pins {
+		pins = "gpio59";
+		function = "pcie0_wake";
+		drive-strength = <8>;
+		bias-pull-down;
+	};
+	pcie0_sdx_pins: pcie0-sdx-pins {
+		sdx_pon {
+			pins = "gpio30", "gpio35";
+			function = "gpio";
+			drive-strength = <8>;
+			bias-pull-up;
+			output-high;
+		};
+		ap2mdm_gp_rst_n {
+			pins = "gpio29";
+			function = "gpio";
+			drive-strength = <8>;
+			output-high;
+		};
+		ap2mdm_status {
+			pins = "gpio26";
+			function = "gpio";
+			drive-strength = <8>;
+			bias-pull-up;
+			output-high;
+		};
+		ap2mdm_err_ftl {
+			pins = "gpio27";
 			function = "gpio";
 			drive-strength = <8>;
 			bias-pull-down;
 		};
-		red {
-			pins = "gpio52";
+		mdm2ap_err_ftl {
+			pins = "gpio33";
 			function = "gpio";
 			drive-strength = <8>;
 			bias-pull-down;
@@ -82,35 +147,88 @@
 	};
 };
 
-&blsp1_uart3 {
-	status = "okay";
-};
+&blsp1_uart3 { status = "disabled"; };
+&blsp1_uart5 { status = "okay"; };
+&cryptobam { status = "okay"; };
+&crypto    { status = "okay"; };
+&prng      { status = "okay"; };
+&qpic_bam  { status = "okay"; };
 
-&qpic_nand {
+&blsp1_spi1 {
 	status = "okay";
-
-	nand@0 {
+	pinctrl-0 = <&spi_0_pins_s10>;
+	pinctrl-names = "default";
+	cs-select = <0>;
+	flash@0 {
+		compatible = "jedec,spi-nor";
 		reg = <0>;
-		#address-cells = <1>;
-		#size-cells = <1>;
-		nand-bus-width = <8>;
-		nand-ecc-strength = <4>;
-		nand-ecc-step-size = <512>;
-
+		spi-max-frequency = <50000000>;
 		partitions {
 			compatible = "fixed-partitions";
 			#address-cells = <1>;
 			#size-cells = <1>;
-
-			partition@0 {
-				label = "ubi";
-				reg = <0x00000000 0x0fa00000>;
-			};
-
-			partition@0fa00000 {
-				label = "ART";
-				reg = <0x0fa00000 0x00400000>;
+			partition@0      { label = "0:SBL1";        reg = <0x000000 0x050000>; read-only; };
+			partition@50000  { label = "0:MIBIB";       reg = <0x050000 0x010000>; read-only; };
+			partition@60000  { label = "0:BOOTCONFIG";  reg = <0x060000 0x020000>; read-only; };
+			partition@80000  { label = "0:BOOTCONFIG1"; reg = <0x080000 0x020000>; read-only; };
+			partition@a0000  { label = "0:QSEE";        reg = <0x0a0000 0x180000>; read-only; };
+			partition@220000 { label = "0:QSEE_1";      reg = <0x220000 0x180000>; read-only; };
+			partition@3a0000 { label = "0:DEVCFG";      reg = <0x3a0000 0x010000>; read-only; };
+			partition@3b0000 { label = "0:DEVCFG_1";    reg = <0x3b0000 0x010000>; read-only; };
+			partition@3c0000 { label = "0:APDP";        reg = <0x3c0000 0x010000>; read-only; };
+			partition@3d0000 { label = "0:APDP_1";      reg = <0x3d0000 0x010000>; read-only; };
+			partition@3e0000 { label = "0:RPM";         reg = <0x3e0000 0x040000>; read-only; };
+			partition@420000 { label = "0:RPM_1";       reg = <0x420000 0x040000>; read-only; };
+			partition@460000 { label = "0:CDT";         reg = <0x460000 0x010000>; read-only; };
+			partition@470000 { label = "0:CDT_1";       reg = <0x470000 0x010000>; read-only; };
+			partition@480000 { label = "0:APPSBLENV";   reg = <0x480000 0x010000>; };
+			partition@490000 { label = "0:APPSBL";      reg = <0x490000 0x0a0000>; read-only; };
+			partition@530000 { label = "0:APPSBL_1";    reg = <0x530000 0x0a0000>; read-only; };
+			partition@5d0000 {
+				label = "0:ART";
+				reg = <0x5d0000 0x040000>;
 				read-only;
+				nvmem-layout {
+					compatible = "fixed-layout";
+					#address-cells = <1>;
+					#size-cells = <1>;
+					precal_art_1000: precal@1000 {
+						reg = <0x1000 0x2f20>;
+					};
+					macaddr_lan1:   macaddr@1002 { reg = <0x1002 0x6>; };
+					macaddr_wan:    macaddr@100e { reg = <0x100e 0x6>; };
+					macaddr_wifi5:  macaddr@1014 { reg = <0x1014 0x6>; };
+					macaddr_wifi24: macaddr@101a { reg = <0x101a 0x6>; };
+				};
+			};
+			partition@610000 { label = "0:ETHPHYFW";    reg = <0x610000 0x080000>; read-only; };
+			partition@690000 { label = "ledeinfo";      reg = <0x690000 0x010000>; };
+			partition@6a0000 { label = "reserve";       reg = <0x6a0000 0x010000>; };
+		};
+	};
+};
+
+&qusb_phy_0 { status = "okay"; };
+&qusb_phy_1 { status = "okay"; };
+&ssphy_0 { status = "okay"; };
+&ssphy_1 { status = "okay"; };
+&usb_0 { status = "okay"; };
+&usb_1 { status = "okay"; };
+
+&qpic_nand {
+	status = "okay";
+	nand@0 {
+		reg = <0>;
+		nand-bus-width = <8>;
+		nand-ecc-strength = <8>;
+		nand-ecc-step-size = <512>;
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			partition@0 {
+				label = "rootfs";
+				reg = <0x00000000 0x0fa00000>;
 			};
 		};
 	};
@@ -118,76 +236,118 @@
 
 &mdio {
 	status = "okay";
-	#address-cells = <1>;
-	#size-cells = <0>;
 	pinctrl-0 = <&mdio_pins>;
 	pinctrl-names = "default";
+	ethernet-phy-package@0 {
+		compatible = "qcom,qca8075-package";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0>;
+		qcom,package-mode = "qsgmii";
 
-	reset-gpios = <&tlmm 37 GPIO_ACTIVE_LOW>;
-
-	phy2: ethernet-phy@2 {
-		reg = <2>;
+		qca8075_0: ethernet-phy@0 {
+			compatible = "ethernet-phy-ieee802.3-c22";
+			reg = <0>;
+		};
+		qca8075_1: ethernet-phy@1 {
+			compatible = "ethernet-phy-ieee802.3-c22";
+			reg = <1>;
+		};
+		qca8075_2: ethernet-phy@2 {
+			compatible = "ethernet-phy-ieee802.3-c22";
+			reg = <2>;
+		};
+		qca8075_3: ethernet-phy@3 {
+			compatible = "ethernet-phy-ieee802.3-c22";
+			reg = <3>;
+		};
 	};
-
-	phy3: ethernet-phy@3 {
-		reg = <3>;
-	};
-
-	phy4: ethernet-phy@24 {
-		reg = <24>;
+	qca8081_24: ethernet-phy@24 {
 		compatible = "ethernet-phy-id004d.d101";
+		reg = <24>;
+		reset-assert-us = <100000>;
+		reset-deassert-us = <500000>;
+		reset-gpios = <&tlmm 48 GPIO_ACTIVE_LOW>;
+		qcom,phy-led-mode = <1>;
 	};
 };
 
 &switch {
 	status = "okay";
-
-	switch_cpu_bmp = <0x1>;
-	switch_lan_bmp = <0x18>;  /* port3 + port4 */
-	switch_wan_bmp = <0x20>;  /* port5 */
+	switch_lan_bmp = <(ESS_PORT3 | ESS_PORT4)>;
+	switch_wan_bmp = <ESS_PORT5>;
+	switch_mac_mode = <MAC_MODE_QSGMII>;
+	switch_mac_mode1 = <MAC_MODE_SGMII_PLUS>;
+	switch_mac_mode2 = <MAC_MODE_SGMII_PLUS>;
+	qcom,port_phyinfo {
+		port@3 {
+			port_id = <3>;
+			phy_address = <2>;
+		};
+		port@4 {
+			port_id = <4>;
+			phy_address = <3>;
+		};
+		port@5 {
+			port_id = <5>;
+			phy_address = <24>;
+			port_mac_sel = "QGMAC_PORT";
+		};
+	};
 };
 
-&dp5 {
+&edma {
 	status = "okay";
-	label = "wan";
-	phy-mode = "usxgmii";
-	phy-handle = <&phy4>;
 };
 
+&dp1 { status = "disabled"; };
+&dp2 { status = "disabled"; };
 &dp3 {
 	status = "okay";
-	label = "lan1";
 	phy-mode = "qsgmii";
-	phy-handle = <&phy2>;
+	phy-handle = <&qca8075_2>;
+	label = "lan1";
+	nvmem-cells = <&macaddr_lan1>;
+	nvmem-cell-names = "mac-address";
 };
-
 &dp4 {
 	status = "okay";
-	label = "lan2";
 	phy-mode = "qsgmii";
-	phy-handle = <&phy3>;
+	phy-handle = <&qca8075_3>;
+	label = "lan2";
+	nvmem-cells = <&macaddr_lan1>;
+	nvmem-cell-names = "mac-address";
+	mac-address-increment = <1>;
+};
+&dp5_syn {
+	status = "okay";
+	phy-mode = "usxgmii";
+	phy-handle = <&qca8081_24>;
+	label = "wan";
+	nvmem-cells = <&macaddr_wan>;
+	nvmem-cell-names = "mac-address";
+};
+
+&pcie_qmp0 {
+	status = "okay";
+};
+&pcie0 {
+	status = "okay";
+	pinctrl-0 = <&pcie0_sdx_pins>, <&pcie0_wake_pins>;
+	pinctrl-names = "default";
+	perst-gpios = <&tlmm 58 GPIO_ACTIVE_LOW>;
+};
+
+&pcie_qmp1 {
+	status = "disabled";
+};
+&pcie1 {
+	status = "disabled";
 };
 
 &wifi {
 	status = "okay";
-	qcom,ath11k-fw-memory-mode = <0>;
-	qcom,ath11k-calibration-variant = "Swaiot-CPE-S10-SKY";
-};
-
-&nss0 {
-	qcom,low-frequency = <187200000>;
-	qcom,mid-frequency = <748800000>;
-	qcom,max-frequency = <1497600000>;
-	npu-supply = <&dummy_reg>;
-	mx-supply = <&dummy_reg>;
-};
-
-&npu_cpr {
-	status = "disabled";
-};
-
-&pcie0 {
-	status = "okay";
-	perst-gpios = <&tlmm 58 GPIO_ACTIVE_LOW>;
-	wake-gpios = <&tlmm 59 GPIO_ACTIVE_HIGH>;
+	qcom,board-id = <0xff 0x0>;
+	nvmem-cell-names = "caldata";
+	nvmem-cells = <&precal_art_1000>;
 };
