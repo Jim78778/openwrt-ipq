@@ -31,7 +31,7 @@
 		device_type = "memory";
 		reg = <0x0 0x40000000 0x0 0x80000000>;
 	};
-
+	
 	keys {
 		compatible = "gpio-keys";
 		pinctrl-0 = <&button_pins>;
@@ -89,7 +89,7 @@
 		drive-strength = <8>;
 		bias-pull-down;
 	};
-	mdio_pins: mdio-pins {
+        mdio_pins: mdio-pins {
 		mdc {
 			pins = "gpio68";
 			function = "mdc";
@@ -103,8 +103,12 @@
 			bias-pull-up;
 		};
 	};
-
-	/* ====== SDX 5G模组 GPIO 定义 ====== */
+    spi_0_pins_s10: spi-0-pins-s10 {
+		pins = "gpio38", "gpio39", "gpio40", "gpio41";
+		function = "blsp0_spi";
+		drive-strength = <8>;
+		bias-disable;
+	};
 	pcie0_wake_pins: pcie0-wake-pins {
 		pins = "gpio59";
 		function = "pcie0_wake";
@@ -327,7 +331,6 @@
 	nvmem-cells = <&macaddr_wan>;
 	nvmem-cell-names = "mac-address";
 };
-
 &pcie_qmp0 {
 	status = "okay";
 };
@@ -344,7 +347,6 @@
 &pcie1 {
 	status = "disabled";
 };
-
 &wifi {
 	status = "okay";
 	qcom,board-id = <0xff 0x0>;
